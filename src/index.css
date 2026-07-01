@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Design system CSS custom properties */
+:root {
+  --color-primary: #153C70;
+  --color-primary-light: #F4F7FB;
+  --color-accent-dark: #0E2954;
+  --color-bg: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-border: #E2E8F0;
+  --color-text-primary: #1A202C;
+  --color-text-secondary: #718096;
+  --color-text-inverted: #FFFFFF;
+  --font-primary: 'Poppins', sans-serif;
+  --font-secondary: 'Inter', 'Roboto', sans-serif;
+  --radius-large: 24px;
+  --radius-medium: 16px;
+  --radius-pill: 9999px;
+  --radius-circle: 50%;
+  --space-screen: 24px;
+  --space-section: 32px;
+  --space-card-lg: 20px;
+  --space-card-sm: 16px;
+  --space-item: 16px;
+  --space-tight: 8px;
+}
+
+/* Base */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-secondary);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E0; border-radius: 9999px; }
+
+/* Typography utilities */
+.font-primary { font-family: var(--font-primary); }
+.font-secondary { font-family: var(--font-secondary); }
+
+/* Status badge colors */
+.badge-excellent { background: #D1FAE5; color: #065F46; }
+.badge-good      { background: #FEF3C7; color: #92400E; }
+.badge-wrong     { background: #FEE2E2; color: #991B1B; }
+
+/* Glow animation for first video card */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(21,60,112,0.3); }
+  50%       { box-shadow: 0 0 28px 6px rgba(21,60,112,0.55); }
+}
+.glow-card { animation: glow-pulse 2s ease-in-out infinite; }
+
+/* Pulsing record dot */
+@keyframes record-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.25); }
+}
+.record-pulse { animation: record-pulse 1s ease-in-out infinite; }
+
+/* Smooth transitions */
+.transition-card { transition: all 0.2s ease; }
+
+/* Modal backdrop */
+.modal-backdrop {
+  background: rgba(14, 41, 84, 0.55);
+  backdrop-filter: blur(4px);
+}

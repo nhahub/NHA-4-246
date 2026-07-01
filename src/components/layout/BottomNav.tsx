@@ -1,0 +1,379 @@
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { openAddWord, closeAddWord, setAddWordText } from '../../store/uiSlice';
+import { useDetailCardFlow } from '../DetailCard/useDetailCardFlow';
+
+// ─── Outline SVG Icons ────────────────────────────────────────────────────────
+
+function IconMastery({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3C8.13 3 5 6.13 5 10c0 2.38 1.19 4.47 3 5.74V17a1 1 0 001 1h6a1 1 0 001-1v-1.26C17.81 14.47 19 12.38 19 10c0-3.87-3.13-7-7-7z"/>
+      <path d="M9 21h6"/>
+      <path d="M10 17v4"/>
+      <path d="M14 17v4"/>
+    </svg>
+  );
+}
+
+function IconVault({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M3 9h18"/>
+      <path d="M9 21V9"/>
+      <path d="M7 6h.01"/>
+      <path d="M12 6h.01"/>
+    </svg>
+  );
+}
+
+function IconWatch({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+    </svg>
+  );
+}
+
+function IconExplore({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <path d="M21 21l-4.35-4.35"/>
+      <path d="M11 8v3l2 2"/>
+    </svg>
+  );
+}
+
+function IconPronounce({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="11" rx="3"/>
+      <path d="M5 11a7 7 0 0014 0"/>
+      <path d="M12 19v3"/>
+      <path d="M9 22h6"/>
+    </svg>
+  );
+}
+
+// ─── Nav Items ────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { to: '/mastery',   Icon: IconMastery,   label: 'Mastery'   },
+  { to: '/vault',     Icon: IconVault,      label: 'Vault'     },
+  { to: '/watch',     Icon: IconWatch,      label: 'Watch'     },
+  { to: '/explore',   Icon: IconExplore,    label: 'Explore'   },
+  { to: '/pronounce', Icon: IconPronounce,  label: 'Pronounce' },
+];
+
+// ─── Hamburger Icon ───────────────────────────────────────────────────────────
+
+function HamburgerIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
+      <path d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+interface SidebarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+const SIDEBAR_COLLAPSED_W = 72;
+const SIDEBAR_EXPANDED_W  = 248;
+
+export function BottomNav({ isOpen, onToggle }: SidebarProps) {
+  const w = isOpen ? SIDEBAR_EXPANDED_W : SIDEBAR_COLLAPSED_W;
+  const dispatch = useAppDispatch();
+  const { addWordInputOpen, addWordText } = useAppSelector(s => s.ui);
+  const { triggerCardOpen } = useDetailCardFlow();
+
+  return (
+    <nav
+      aria-label="Main navigation"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        zIndex: 50,
+        width: w,
+        backgroundColor: '#FFFFFF',
+        boxShadow: '4px 0 24px rgba(21,60,112,0.10)',
+        borderRadius: '0 20px 20px 0',
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'width 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+      }}
+    >
+      {/* ── Header ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isOpen ? 'space-between' : 'center',
+          padding: isOpen ? '20px 16px 16px 20px' : '20px 0 16px',
+          borderBottom: '1px solid #E2E8F0',
+          minHeight: 68,
+          flexShrink: 0,
+          transition: 'padding 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        }}
+      >
+        {/* Logo text — smoothly morphs in/out */}
+        <span
+          style={{
+            fontFamily: 'Poppins, sans-serif',
+            fontWeight: 700,
+            fontSize: 22,
+            color: '#153C70',
+            letterSpacing: '-0.5px',
+            whiteSpace: 'nowrap',
+            opacity: isOpen ? 1 : 0,
+            maxWidth: isOpen ? 160 : 0,
+            overflow: 'hidden',
+            transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
+            transition: 'opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), max-width 0.38s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            pointerEvents: 'none',
+          }}
+        >
+          Lexi
+        </span>
+
+        {/* Hamburger toggle button */}
+        <button
+          onClick={onToggle}
+          aria-label={isOpen ? 'Collapse navigation' : 'Expand navigation'}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            backgroundColor: '#153C70',
+            border: '2.5px solid white',
+            boxShadow: '0 3px 12px rgba(21,60,112,0.28)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'white',
+            flexShrink: 0,
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.08)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 5px 20px rgba(21,60,112,0.45)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 3px 12px rgba(21,60,112,0.28)';
+          }}
+        >
+          <HamburgerIcon />
+        </button>
+      </div>
+
+      {/* ── Add Word Button ── */}
+      <div
+        style={{
+          padding: '16px 16px 8px 16px',
+          display: 'flex',
+          justifyContent: 'flex-start',
+          flexShrink: 0,
+          transition: 'padding 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        }}
+      >
+        <button
+          onClick={() => dispatch(openAddWord())}
+          aria-label="Add a word"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            backgroundColor: '#153C70',
+            color: 'white',
+            border: '2.5px solid white',
+            boxShadow: '0 3px 12px rgba(21,60,112,0.22)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            fontWeight: 300,
+            lineHeight: 1,
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.08)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 5px 20px rgba(21,60,112,0.4)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 3px 12px rgba(21,60,112,0.22)';
+          }}
+        >
+          +
+        </button>
+
+        {/* "Add" label — smoothly morphs in/out */}
+        <span
+          style={{
+            fontFamily: 'Poppins, sans-serif',
+            fontWeight: 600,
+            fontSize: 14,
+            color: '#153C70',
+            marginLeft: isOpen ? 14 : 0,
+            alignSelf: 'center',
+            whiteSpace: 'nowrap',
+            opacity: isOpen ? 1 : 0,
+            maxWidth: isOpen ? 80 : 0,
+            overflow: 'hidden',
+            transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
+            transition: 'opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), max-width 0.38s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1), margin-left 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          }}
+        >
+          Add
+        </span>
+      </div>
+
+      {/* ── Floating Add-Word Input ── */}
+      {addWordInputOpen && (
+        <div
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-3 py-2 rounded-full shadow-xl"
+          style={{ background: 'white', border: '2px solid #153C70', minWidth: 280 }}
+        >
+          <input
+            autoFocus
+            value={addWordText}
+            onChange={e => dispatch(setAddWordText(e.target.value))}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && addWordText.trim()) {
+                dispatch(closeAddWord());
+                triggerCardOpen(addWordText.trim());
+              }
+              if (e.key === 'Escape') dispatch(closeAddWord());
+            }}
+            placeholder="Type a word or phrase…"
+            className="flex-1 text-sm outline-none bg-transparent"
+            style={{ fontFamily: 'Inter, sans-serif', color: '#1A202C' }}
+          />
+          <button
+            onClick={() => {
+              if (addWordText.trim()) {
+                dispatch(closeAddWord());
+                triggerCardOpen(addWordText.trim());
+              }
+            }}
+            aria-label="Look up word"
+            className="text-xl"
+          >
+            🐝
+          </button>
+          <button
+            onClick={() => dispatch(closeAddWord())}
+            aria-label="Close"
+            className="text-base"
+            style={{ color: '#718096' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Nav Items ── */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          padding: '8px 12px 0',
+          alignItems: 'stretch',
+          transition: 'padding 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        }}
+      >
+        {NAV_ITEMS.map(({ to, Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            aria-label={label}
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '11px 14px',
+              width: '100%',
+              justifyContent: 'flex-start',
+              borderRadius: 12,
+              textDecoration: 'none',
+              fontFamily: 'Poppins, sans-serif',
+              fontSize: 14,
+              fontWeight: isActive ? 600 : 500,
+              color: isActive ? '#153C70' : '#718096',
+              backgroundColor: isActive ? '#EEF2FA' : 'transparent',
+              borderLeft: isOpen && isActive ? '3px solid #153C70' : '3px solid transparent',
+              transition: 'all 0.18s ease',
+              position: 'relative',
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <span
+                  style={{
+                    color: isActive ? '#153C70' : '#A0AEC0',
+                    flexShrink: 0,
+                    transition: 'color 0.18s',
+                    position: 'relative',
+                  }}
+                >
+                  {/* Collapsed active indicator — left border pill */}
+                  {!isOpen && isActive && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: -10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 3,
+                        height: 24,
+                        borderRadius: 9999,
+                        backgroundColor: '#153C70',
+                      }}
+                    />
+                  )}
+                  <Icon size={20} />
+                </span>
+                <span
+                  style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    opacity: isOpen ? 1 : 0,
+                    maxWidth: isOpen ? 160 : 0,
+                    transform: isOpen ? 'translateX(0)' : 'translateX(-8px)',
+                    transition: 'opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), max-width 0.38s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                  }}
+                >
+                  {label}
+                </span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
+
+      {/* Footer spacer */}
+      <div style={{ height: 24, flexShrink: 0 }} />
+    </nav>
+  );
+}
+
+// Export constants so AppShell can use them for layout offset
+export { SIDEBAR_COLLAPSED_W, SIDEBAR_EXPANDED_W };
