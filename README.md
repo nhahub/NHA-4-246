@@ -79,6 +79,8 @@ See `design.md` for full token reference. All CSS variables are in `src/index.cs
 - Font: Poppins (headings) + Inter (body)
 - Cards: 16–24px border radius
 - Buttons: pill-shaped (9999px)
+# Team members
+
 Lead Technical Architect: Marwa Ahmed Mohamed Selim
 Presentation and feasilbity report: Noor Ayman Mohamed
 QA and Testing: Shahd Medhat Arafa
