@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import youtubeIcon from '../../assets/youtube.svg';
+import graphicDesignerNavy from '../../assets/graphic_designer_navy.svg';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { loadSuggestedVideos, validateUrl, clearUrlError } from '../../store/watchSlice';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -14,32 +16,53 @@ function VideoCard({ video, first }: { video: VideoItem; first: boolean }) {
   const navigate = useNavigate();
   return (
     <div
-      className={`rounded-2xl overflow-hidden transition-all cursor-pointer hover:shadow-lg active:scale-[0.98] ${first ? 'glow-card' : ''}`}
+      className={`relative rounded-2xl overflow-hidden transition-all cursor-pointer hover:shadow-lg active:scale-[0.98] ${first ? 'glow-card' : ''}`}
       style={{ border: `2px solid ${first ? '#153C70' : '#E2E8F0'}`, backgroundColor: 'white' }}
-      onClick={() => navigate(`/watch/player/${video.videoId}`)}
+      onClick={() => navigate(`/watch/player/${video.videoId}`, { state: { categories: video.category ? [video.category] : [] } })}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && navigate(`/watch/player/${video.videoId}`)}
+      onKeyDown={e => e.key === 'Enter' && navigate(`/watch/player/${video.videoId}`, { state: { categories: video.category ? [video.category] : [] } })}
       aria-label={`Watch ${video.title}`}
     >
-      <div className="flex">
-        {/* Thumbnail */}
-        <div className="relative flex-shrink-0" style={{ width: 220 }}>
+      {/* Recommended badge:
+            mobile  → absolute top-right corner of the whole card
+            desktop → hidden here (rendered inside thumb instead) */}
+      {first && (
+        <span
+          className="md:hidden absolute top-0 right-0 z-10 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+          style={{ backgroundColor: '#153C70' }}
+        >
+          ✨ recommended
+        </span>
+      )}
+
+      {/* flex row: on mobile stretch children to fill card height; on desktop use default align */}
+      <div className="flex max-md:items-stretch">
+
+        {/* Thumbnail column */}
+        <div className="video-card-thumb relative flex-shrink-0 max-md:self-stretch">
+
+          {/* Image:
+                mobile  → absolute so it fills the full stretched height (no gap below)
+                desktop → normal flow so it keeps its natural 16:9 height */}
           <img
             src={video.thumbnailUrl}
             alt={video.title}
-            className="w-full h-full object-cover"
-            style={{ minHeight: 90 }}
-            onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/320x180/153C70/FFFFFF?text=Video'; }}
+            className="max-md:absolute max-md:inset-0 w-full h-full object-cover"
+            onError={e => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'%3E%3Crect fill='%23153C70' width='320' height='180'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='16'%3EVideo%3C/text%3E%3C/svg%3E"; } }}
           />
+
+          {/* Duration badge — always bottom-right of the image */}
           <span
-            className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold text-white"
+            className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold text-white z-10"
             style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
           >
             {video.duration}
           </span>
+
+          {/* Recommended badge inside thumb — desktop only */}
           {first && (
-            <div className="absolute top-1.5 left-1.5">
+            <div className="max-md:hidden absolute top-1.5 left-1.5 z-10">
               <span
                 className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
                 style={{ backgroundColor: '#153C70' }}
@@ -49,8 +72,9 @@ function VideoCard({ video, first }: { video: VideoItem; first: boolean }) {
             </div>
           )}
         </div>
-        {/* Info */}
-        <div className="flex flex-col justify-center px-4 py-3 min-w-0">
+
+        {/* Info panel — fills remaining horizontal space */}
+        <div className="flex flex-col justify-center px-4 py-3 min-w-0 flex-1">
           <p
             className="font-semibold text-sm leading-snug line-clamp-2"
             style={{ color: '#1A202C', fontFamily: 'Poppins, sans-serif' }}
@@ -71,10 +95,12 @@ export default function WatchPage() {
   const navigate = useNavigate();
   const { suggestedVideos, promptMessage, videosLoading, urlValidating, urlError, error } = useAppSelector(s => s.watch);
   const [searchValue, setSearchValue] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
 
-  useEffect(() => {
-    dispatch(loadSuggestedVideos());
-  }, [dispatch]);
+  // Auto-load on mount disabled — uncomment to re-enable personalised recommendations:
+  // useEffect(() => {
+  //   dispatch(loadSuggestedVideos());
+  // }, [dispatch]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,8 +117,9 @@ export default function WatchPage() {
         }
       });
     } else {
-      // Topic search — for now navigate to first suggested video or show message
-      dispatch(loadSuggestedVideos());
+      // Topic search — send the query to the edge function for a real YouTube search
+      setHasSearched(true);
+      dispatch(loadSuggestedVideos(trimmed));
     }
   };
 
@@ -103,8 +130,9 @@ export default function WatchPage() {
         className="px-6 pt-12 pb-6"
         style={{ background: 'linear-gradient(135deg, #0E2954 0%, #153C70 100%)' }}
       >
-        <h1 className="text-2xl font-bold text-white mb-4" style={{ fontFamily: 'Poppins, sans-serif' }}>
-          ▶️ Watch
+        <h1 className="text-2xl font-bold text-white mb-4 flex items-center gap-3" style={{ fontFamily: 'Poppins, sans-serif' }}>
+          <img src={youtubeIcon} alt="" className="w-7 h-7" />
+          Watch
         </h1>
         {/* Search bar */}
         <form onSubmit={handleSearch} className="flex items-center gap-2">
@@ -138,13 +166,24 @@ export default function WatchPage() {
       </div>
 
       <div className="px-6 pt-5">
-        {videosLoading && (
-          <div className="flex justify-center py-12">
-            <LoadingSpinner size="lg" label="Loading videos…" />
+        {/* ── Pre-search idle state: graphic + message, no network call ── */}
+        {!hasSearched && !videosLoading && !error && (
+          <div className="flex flex-col items-center gap-4 py-12 text-center">
+            <img src={graphicDesignerNavy} alt="" className="w-40 h-40 object-contain" />
+            <p className="text-sm font-medium" style={{ color: '#1A202C', fontFamily: 'Inter, sans-serif' }}>
+              Enjoy watching videos while enriching your vocabulary!
+            </p>
           </div>
         )}
 
-        {!videosLoading && error && (
+        {/* ── Post-search states ── */}
+        {hasSearched && videosLoading && (
+          <div className="flex justify-center py-12">
+            <LoadingSpinner label="Loading videos…" />
+          </div>
+        )}
+
+        {hasSearched && !videosLoading && error && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <span className="text-4xl">😔</span>
             <p className="text-sm" style={{ color: '#718096' }}>Service currently busy. Please try again.</p>
@@ -158,7 +197,7 @@ export default function WatchPage() {
           </div>
         )}
 
-        {!videosLoading && promptMessage && (
+        {hasSearched && !videosLoading && promptMessage && (
           <div className="flex flex-col items-center gap-4 py-12 text-center">
             <span className="text-5xl">🎬</span>
             <div
@@ -172,7 +211,7 @@ export default function WatchPage() {
           </div>
         )}
 
-        {!videosLoading && suggestedVideos.length > 0 && (
+        {hasSearched && !videosLoading && suggestedVideos.length > 0 && (
           <div className="flex flex-col gap-5">
             {suggestedVideos.map((video, i) => (
               <VideoCard key={video.videoId} video={video} first={i === 0} />

@@ -43,7 +43,7 @@ export default function PronouncePage() {
       <div className="px-6 pt-5">
         {phonemesLoading ? (
           <div className="flex justify-center py-12">
-            <LoadingSpinner size="lg" label="Loading phonemes…" />
+            <LoadingSpinner label="Loading phonemes…" />
           </div>
         ) : (
           <>

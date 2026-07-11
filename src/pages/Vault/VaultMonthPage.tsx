@@ -38,12 +38,6 @@ function WordRow({ word, isOpen, onToggle }: {
         </div>
         <div className="flex items-center gap-2">
           <span
-            className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center"
-            style={{ backgroundColor: '#F4F7FB', color: '#153C70' }}
-          >
-            {word.stage}
-          </span>
-          <span
             className="text-lg transition-transform"
             style={{
               color: '#153C70',
@@ -59,7 +53,7 @@ function WordRow({ word, isOpen, onToggle }: {
       {isOpen && (
         <div className="px-5 pb-5 border-t" style={{ borderColor: '#E2E8F0' }}>
           <div className="pt-4">
-            <DetailCardFull card={word.cardData} />
+            <DetailCardFull card={word.cardData} standalone />
           </div>
         </div>
       )}

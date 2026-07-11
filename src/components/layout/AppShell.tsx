@@ -12,13 +12,26 @@ export function AppShell() {
   const isOnboarding = location.pathname === '/onboarding';
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
+  // Match BottomNav's mobile breakpoint so paddingLeft stays in sync
+  const [isMobile, setIsMobile] = React.useState(
+    () => window.matchMedia('(max-width: 767px)').matches,
+  );
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Always offset by collapsed width only — sidebar overlays content when expanded
+  const collapsedW = isMobile ? 36 : 72;
+
   return (
     <div
-      className="flex flex-col min-h-screen"
-      style={{
+        //Solid Pastel Background Color
+        className="flex flex-col min-h-screen bg-gradient-to-b from-rose-50 via-violet-50 to-sky-50"      style={{
         paddingBottom: isOnboarding ? 0 : 80,
-        paddingLeft: isOnboarding ? 0 : (isSidebarOpen ? 248 : 72),
-        transition: 'padding-left 0.38s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        paddingLeft: isOnboarding ? 0 : collapsedW,
       }}
     >
       <main className="flex-1">

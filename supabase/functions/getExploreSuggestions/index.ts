@@ -50,14 +50,21 @@ serve(async (req) => {
     const seeds     = shuffled.slice(0, Math.min(SEED_COUNT, shuffled.length));
     const seedWords = seeds.map((s) => s.headword).join(", ");
 
-    // Ask Gemini for semantically related vocabulary suggestions
+    // Ask Gemini for semantically related vocabulary suggestions.
+    // NOTE: response_format:json_object requires a top-level object, not a bare array.
+    // Wrapping in { "suggestions": [...] } is the only reliable shape with Groq.
     const suggestionPrompt = `Given these ${profile?.target_language ?? "en"} vocabulary words: ${seedWords}
 Suggest exactly ${OUTPUT_COUNT} semantically related vocabulary items (words or phrases) in ${profile?.target_language ?? "en"} that a language learner would find useful.
 Do NOT repeat the seed words.
-Return ONLY a JSON array of strings: ["word1", "word2", ...]`;
+Return a JSON object: { "suggestions": ["word1", "word2", ...] }`;
 
     const rawSuggestions = await callGemini(suggestionPrompt, { jsonMode: true });
-    const suggestions: string[] = JSON.parse(rawSuggestions);
+    const parsedSuggestions = JSON.parse(rawSuggestions);
+    // Prefer the explicit key; fall back to the first array-valued key the LLM chose
+    const suggestions: string[] =
+      Array.isArray(parsedSuggestions.suggestions)
+        ? parsedSuggestions.suggestions
+        : (parsedSuggestions[Object.keys(parsedSuggestions)[0]] ?? []);
 
     // Generate a full DetailCard for each suggestion (reusing generateDetailCard logic inline)
     const cards = await Promise.all(
@@ -73,14 +80,28 @@ Return ONLY valid JSON (no markdown):
     "headword": "${suggestion}",
     "nativeSynonyms": ["<1-3 synonyms in ${profile?.native_language ?? "en"}>"],
     "contexts": [
-      { "label": "<domain>", "explanation": "<explanation in ${profile?.native_language ?? "en"}>", "example": "<sentence with **${suggestion}** bolded>" }
+      { "label": "<domain, written in ${profile?.target_language ?? "en"}>", "explanation": "<explanation in ${profile?.target_language ?? "en"}>", "example": "<sentence in ${profile?.target_language ?? "en"} with **${suggestion}** bolded>" }
     ]
   }
-}`;
+}
+Every field except nativeSynonyms must be written entirely in ${profile?.target_language ?? "en"}. Do not mix languages within label, explanation, or example.`;
         try {
           const raw  = await callGemini(prompt, { jsonMode: true });
           const parsed = JSON.parse(raw);
-          return parsed.card ?? null;
+          const card = parsed.card ?? null;
+          if (!card) return null;
+          // Normalize nativeSynonyms → synonyms to match frontend DetailCardData
+          if ("nativeSynonyms" in card) {
+            card.synonyms = card.nativeSynonyms;
+            delete card.nativeSynonyms;
+          }
+          // Inject required DetailCardData fields missing from the LLM output
+          card.id            = crypto.randomUUID();
+          card.stage         = 0;
+          card.stage6_streak = 0;
+          card.active        = true;
+          card.source        = "explore";
+          return card;
         } catch {
           return null;
         }

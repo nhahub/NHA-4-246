@@ -38,12 +38,13 @@ serve(async (req) => {
     const assessMap = new Map((assessments ?? []).map((a) => [a.phoneme, a.status]));
 
     // Unattempted phonemes get a neutral status; order best-performing first
-    const ORDER: Record<string, number> = { excellent: 0, good: 1, wrong: 2, neutral: 3 };
+    const ORDER: Record<string, number> = { excellent: 0, good: 1, wrong: 2 };
 
     const phonemes = (refs ?? []).map((r) => ({
       phoneme: r.phoneme,
-      label:   r.label,
-      status:  (assessMap.get(r.phoneme) as "excellent" | "good" | "wrong") ?? "neutral",
+      // Map "neutral" (unattempted) to "wrong" to match the frontend PhonemeStatus type
+      // which only accepts 'excellent' | 'good' | 'wrong'
+      status: (assessMap.get(r.phoneme) ?? "wrong") as "excellent" | "good" | "wrong",
     })).sort((a, b) => ORDER[a.status] - ORDER[b.status]);
 
     return new Response(JSON.stringify(phonemes), {

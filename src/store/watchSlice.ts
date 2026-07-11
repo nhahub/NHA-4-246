@@ -6,6 +6,9 @@ interface WatchState {
   suggestedVideos: VideoItem[];
   promptMessage: string | null;
   videosLoading: boolean;
+  /** Tracks the requestId of the most-recently dispatched loadSuggestedVideos call.
+   *  Fulfilled/rejected handlers for older in-flight requests are silently discarded. */
+  latestRequestId: string | null;
   captions: CaptionLine[];
   captionsLoading: boolean;
   sessionSavedWords: Array<{ headword: string; nativeTranslation: string }>;
@@ -18,6 +21,7 @@ const initialState: WatchState = {
   suggestedVideos: [],
   promptMessage: null,
   videosLoading: false,
+  latestRequestId: null,
   captions: [],
   captionsLoading: false,
   sessionSavedWords: [],
@@ -26,8 +30,8 @@ const initialState: WatchState = {
   error: null,
 };
 
-export const loadSuggestedVideos = createAsyncThunk('watch/loadVideos', async () => {
-  return await getSuggestedVideos();
+export const loadSuggestedVideos = createAsyncThunk('watch/loadVideos', async (query?: string) => {
+  return await getSuggestedVideos(query);
 });
 
 export const loadCaptions = createAsyncThunk('watch/loadCaptions', async (videoId: string) => {
@@ -55,8 +59,15 @@ const watchSlice = createSlice({
   },
   extraReducers: builder => {
     builder
-      .addCase(loadSuggestedVideos.pending, state => { state.videosLoading = true; state.error = null; })
+      .addCase(loadSuggestedVideos.pending, (state, action) => {
+        state.videosLoading = true;
+        state.error = null;
+        // Stamp the latest request so stale responses can be identified and discarded.
+        state.latestRequestId = action.meta.requestId;
+      })
       .addCase(loadSuggestedVideos.fulfilled, (state, action) => {
+        // Discard stale responses — only the most recently dispatched call wins.
+        if (action.meta.requestId !== state.latestRequestId) return;
         state.videosLoading = false;
         const result = action.payload;
         if ('promptMessage' in result) {
@@ -68,6 +79,9 @@ const watchSlice = createSlice({
         }
       })
       .addCase(loadSuggestedVideos.rejected, (state, action) => {
+        // Discard stale errors — a superseded request's failure should not clobber
+        // a valid result or show a spurious error message to the user.
+        if (action.meta.requestId !== state.latestRequestId) return;
         state.videosLoading = false;
         state.error = action.error.message || 'Failed to load videos';
       })

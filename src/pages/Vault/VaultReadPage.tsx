@@ -112,7 +112,7 @@ export default function VaultReadPage() {
       <div className="px-6 pt-6 flex flex-col gap-5">
         {generating && (
           <div className="flex justify-center py-12">
-            <LoadingSpinner size="lg" label="Generating paragraph…" />
+            <LoadingSpinner label="Generating paragraph…" />
           </div>
         )}
 

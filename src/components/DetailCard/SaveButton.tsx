@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DetailCardData } from '../../services/api/types';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { saveWordThunk, removeWordThunk } from '../../store/wordsSlice';
-import { setSaved, showRemoveConfirm, hideRemoveConfirm } from '../../store/detailCardSlice';
 import { showToast } from '../../store/uiSlice';
 import { addSessionWord } from '../../store/watchSlice';
 
@@ -13,20 +12,37 @@ interface Props {
 
 export function SaveButton({ card, source = 'manual' }: Props) {
   const dispatch = useAppDispatch();
-  const { isSaved, showRemoveConfirm: confirmVisible } = useAppSelector(s => s.detailCard);
-  const savedWordIds = useAppSelector(s => s.words.ids);
-  const isActuallySaved = savedWordIds.includes(card.id) || isSaved;
+  const wordsEntities = useAppSelector(s => s.words.entities);
+  const vaultWordsByMonth = useAppSelector(s => s.vault.wordsByMonth);
+
+  const actualSavedWordId = useMemo(() => {
+    if (wordsEntities[card.id]) return card.id;
+    
+    const lowerHeadword = card.headword.toLowerCase();
+    
+    const wordEntity = Object.values(wordsEntities).find(w => w.headword.toLowerCase() === lowerHeadword);
+    if (wordEntity) return wordEntity.id;
+
+    for (const month in vaultWordsByMonth) {
+      const vaultWord = vaultWordsByMonth[month].find(w => w.headword.toLowerCase() === lowerHeadword);
+      if (vaultWord) return vaultWord.id;
+    }
+
+    return null;
+  }, [wordsEntities, vaultWordsByMonth, card.id, card.headword]);
+
+  const isActuallySaved = !!actualSavedWordId;
   const [saving, setSaving] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   const handleSave = async () => {
     if (isActuallySaved) {
-      dispatch(showRemoveConfirm());
+      setConfirmVisible(true);
       return;
     }
     setSaving(true);
     try {
       await dispatch(saveWordThunk({ word: card, source })).unwrap();
-      dispatch(setSaved(true));
       if (source === 'watch') {
         dispatch(addSessionWord({
           headword: card.headword,
@@ -42,10 +58,10 @@ export function SaveButton({ card, source = 'manual' }: Props) {
   };
 
   const handleRemove = async () => {
+    if (!actualSavedWordId) return;
     try {
-      await dispatch(removeWordThunk(card.id)).unwrap();
-      dispatch(setSaved(false));
-      dispatch(hideRemoveConfirm());
+      await dispatch(removeWordThunk(actualSavedWordId)).unwrap();
+      setConfirmVisible(false);
       dispatch(showToast({ message: `"${card.headword}" removed.`, type: 'info' }));
     } catch {
       dispatch(showToast({ message: 'Failed to remove. Please try again.', type: 'error' }));
@@ -86,7 +102,7 @@ export function SaveButton({ card, source = 'manual' }: Props) {
               Remove
             </button>
             <button
-              onClick={() => dispatch(hideRemoveConfirm())}
+              onClick={() => setConfirmVisible(false)}
               className="flex-1 py-2 rounded-full text-xs font-semibold"
               style={{ backgroundColor: '#F4F7FB', color: '#718096' }}
             >

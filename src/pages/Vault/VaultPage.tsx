@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import cabinetIcon from '../../assets/cabinet-filing.svg';
+import vaultIcon from '../../assets/vault.svg';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { loadVaultMonths } from '../../store/vaultSlice';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -46,8 +48,9 @@ export default function VaultPage() {
         className="px-6 pt-12 pb-8"
         style={{ background: 'linear-gradient(135deg, #0E2954 0%, #153C70 100%)' }}
       >
-        <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-          🗄️ Vault
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3" style={{ fontFamily: 'Poppins, sans-serif' }}>
+          <img src={cabinetIcon} alt="" className="w-7 h-7" />
+          Vault
         </h1>
         <p className="text-white/60 text-sm mt-1">Your saved vocabulary, organized by month</p>
       </div>
@@ -55,9 +58,8 @@ export default function VaultPage() {
       <div className="px-6 pt-6 flex flex-col gap-3">
         {months.length === 0 ? (
           <EmptyState
-            icon="🗄️"
-            title="Your vault is empty"
-            message="Start saving words by selecting text anywhere in the app."
+            iconSrc={vaultIcon}
+            title="Your saved words will be displayed here"
           />
         ) : (
           [...months].sort((a, b) => b.month.localeCompare(a.month)).map(item => (
@@ -80,12 +82,6 @@ export default function VaultPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span
-                  className="px-3 py-1 rounded-full text-xs font-bold"
-                  style={{ backgroundColor: '#F4F7FB', color: '#153C70' }}
-                >
-                  {item.wordCount}
-                </span>
                 <span style={{ color: '#153C70' }}>›</span>
               </div>
             </button>

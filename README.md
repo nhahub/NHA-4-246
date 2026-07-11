@@ -15,14 +15,26 @@ Then open http://localhost:5173.
 
 ## Backend Integration Points
 
-All data flows through `/src/services/api/mockApi.ts`. To connect the real Supabase/edge-function backend, replace **each function body** with the real implementation. Function signatures **must not change** — the entire component tree depends on them.
+All data flows through `/src/services/api/mockApi.ts` and `/src/services/api/auth.ts`. To connect the real Supabase/edge-function backend, replace **each function body** with the real implementation. Function signatures **must not change** — the entire component tree depends on them.
+
+### Authentication (`/src/services/api/auth.ts` → Supabase Auth JS client)
+
+| Function | Description | Real implementation |
+|---|---|---|
+| `signUp` | Create a new user account | `supabase.auth.signUp({ email, password })` |
+| `signIn` | Sign an existing user in | `supabase.auth.signInWithPassword({ email, password })` |
+| `signOut` | End the current session | `supabase.auth.signOut()` |
+| `requestPasswordReset` | Send a password reset email | `supabase.auth.resetPasswordForEmail(email, { redirectTo })` |
+| `confirmPasswordReset` | Set new password from reset token | `supabase.auth.updateUser({ password })` |
+| `restoreSession` | Rehydrate an existing session on app load | `supabase.auth.getSession()` |
+
+### App Data (`/src/services/api/mockApi.ts` → Supabase edge functions)
 
 | Function | Description | Backend target |
 |---|---|---|
 | `generateDetailCard` | Generate full/simplified/too_long card from text | Gemini edge function |
 | `checkTypos` | Spell-check input text | Gemini edge function |
 | `translateExplanations` | Translate context explanations to native language | Gemini edge function |
-| `getYouglishVideo` | Get pronunciation video URL for a word | YouGlish API / Supabase function |
 | `assessPronunciation` | Assess recorded audio against a target word | SpeechSuper API via Supabase function |
 | `saveWord` | Persist a word to user's vault | Supabase insert (words table) |
 | `removeWord` | Remove a word from user's vault | Supabase delete |

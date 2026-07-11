@@ -2,15 +2,19 @@ import React from 'react';
 
 interface Props {
   icon?: string;
+  iconSrc?: string;
   title: string;
   message?: string;
   action?: { label: string; onClick: () => void };
 }
 
-export function EmptyState({ icon = '📭', title, message, action }: Props) {
+export function EmptyState({ icon = '📭', iconSrc, title, message, action }: Props) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center">
-      <div className="text-5xl">{icon}</div>
+      {iconSrc
+        ? <img src={iconSrc} alt="" className="w-32 h-32 object-contain" />
+        : <div className="text-5xl">{icon}</div>
+      }
       <div>
         <p className="font-primary font-semibold text-base" style={{ color: '#1A202C' }}>{title}</p>
         {message && (

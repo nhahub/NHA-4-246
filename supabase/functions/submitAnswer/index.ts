@@ -63,6 +63,19 @@ Return ONLY JSON: { "correct": true } or { "correct": false, "reason": string }`
         userAnswer.toLowerCase().includes(word.headword.toLowerCase());
     }
 
+    // Clear the cached question so the next review cycle generates a fresh one.
+    // on_answer marks this row 'completed' and schedule_review inserts a new pending
+    // row (which defaults to current_mcq = NULL), so this is belt-and-suspenders.
+    try {
+      await supabase
+        .from("review_queue")
+        .update({ current_mcq: null })
+        .eq("id", reviewId);
+    } catch (clearEx) {
+      console.error("[submitAnswer] Failed to clear current_mcq cache", clearEx);
+      // Non-fatal: proceed with answer processing regardless
+    }
+
     // Call on_answer RPC (handles stage transitions + scheduling transactionally)
     const { data: rpcData, error: rpcErr } = await supabase.rpc("on_answer", {
       p_review_id:  reviewId,

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { closeCard } from '../../store/detailCardSlice';
+import { closeCard, setMode } from '../../store/detailCardSlice';
 import { DetailCardLoading } from './DetailCardLoading';
 import { DetailCardTooLong } from './DetailCardTooLong';
 import { DetailCardTypoCheck } from './DetailCardTypoCheck';
@@ -18,6 +18,7 @@ interface Props {
 export function DetailCard({ source = 'selection' }: Props) {
   const dispatch = useAppDispatch();
   const { isOpen, mode, card, retryCount } = useAppSelector(s => s.detailCard);
+  const { targetLanguage } = useAppSelector(s => s.user);
   const { handleAcceptCorrection, handleSubmitEdit } = useDetailCardFlow();
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -52,9 +53,15 @@ export function DetailCard({ source = 'selection' }: Props) {
       case 'full':
         return card ? <DetailCardFull card={card} source={source} /> : null;
       case 'watch':
-        return <DetailCardWatchView />;
-      case 'pronounce':
-        return <DetailCardPronounceView />;
+        return card ? <DetailCardWatchView
+          card={card}
+          targetLanguage={targetLanguage}
+          onBack={() => dispatch(setMode('full'))}
+        /> : null;
+      // PRONOUNCE — TEMPORARILY DISABLED (SpeechSuper integration paused)
+      // Re-enable by restoring: case 'pronounce': return <DetailCardPronounceView />;
+      // case 'pronounce':
+      //   return <DetailCardPronounceView />;
       default:
         return null;
     }

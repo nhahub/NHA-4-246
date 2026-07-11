@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
+import compassIcon from '../../assets/compass.svg';
+import exploreIcon from '../../assets/explore.svg';
 import { loadExploreSuggestions, searchExplore, setSearchQuery, clearSearch } from '../../store/exploreSlice';
-import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DetailCardFull } from '../../components/DetailCard/DetailCardFull';
 import { DetailCardData } from '../../services/api/types';
 
@@ -52,7 +54,7 @@ function ExploreCard({ card }: { card: DetailCardData }) {
           onClick={e => e.stopPropagation()}
         >
           <div className="pt-4">
-            <DetailCardFull card={card} source="explore" />
+            <DetailCardFull card={card} source="explore" standalone />
           </div>
         </div>
       )}
@@ -80,7 +82,7 @@ export default function ExplorePage() {
   const handleRefresh = () => {
     dispatch(clearSearch());
     setInputValue('');
-    dispatch(loadExploreSuggestions());
+    dispatch(loadExploreSuggestions(true));
   };
 
   const displayCards = searchQuery ? searchResults : cards;
@@ -93,8 +95,9 @@ export default function ExplorePage() {
         style={{ background: 'linear-gradient(135deg, #0E2954 0%, #153C70 100%)' }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
-            🔍 Explore
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3" style={{ fontFamily: 'Poppins, sans-serif' }}>
+            <img src={compassIcon} alt="" className="w-7 h-7" />
+            Explore
           </h1>
           <button
             onClick={handleRefresh}
@@ -156,7 +159,7 @@ export default function ExplorePage() {
       <div className="px-6 pt-5 flex flex-col gap-4">
         {(loading || searchLoading) && (
           <div className="flex justify-center py-10">
-            <LoadingSpinner size="lg" label="Loading suggestions…" />
+            <LoadingSpinner label="Loading suggestions…" />
           </div>
         )}
 
@@ -182,14 +185,15 @@ export default function ExplorePage() {
 
         {!safetyError && !loading && !searchLoading && emptyMessage && (
           <EmptyState
-            icon="🌱"
-            title="Nothing to explore yet"
-            message={emptyMessage}
+            iconSrc={exploreIcon}
+            title="Start saving words to explore new ones, or just use the search bar to search about a topic you'd like to enrich your vocab in"
           />
         )}
 
         {!safetyError && !loading && !searchLoading && displayCards.map(card => (
-          <ExploreCard key={card.id} card={card} />
+          <div key={card.id} className="rounded-3xl p-5 shadow-sm" style={{ border: '2px solid #E2E8F0', backgroundColor: 'white' }}>
+            <DetailCardFull card={card} source="explore" standalone />
+          </div>
         ))}
       </div>
     </div>

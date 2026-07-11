@@ -3,8 +3,8 @@ import { useAppDispatch, useAppSelector } from '../../store';
 import {
   loadMasterySession, submitMasteryAnswer, advanceToNext, setUserAnswer,
 } from '../../store/masterySessionSlice';
-import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DetailCardFull } from '../../components/DetailCard/DetailCardFull';
 import { MCQQuestion } from './QuestionTypes/MCQQuestion';
 import { ReversedMCQQuestion } from './QuestionTypes/ReversedMCQQuestion';
@@ -12,8 +12,9 @@ import { ListenAndWriteQuestion } from './QuestionTypes/ListenAndWriteQuestion';
 import { FillInBlanksQuestion } from './QuestionTypes/FillInBlanksQuestion';
 import { NuancedUsageQuestion } from './QuestionTypes/NuancedUsageQuestion';
 import { OpenProductionQuestion } from './QuestionTypes/OpenProductionQuestion';
-import allDoneImg from '../../assets/allDone.png';
+import masteryIcon from '../../assets/mastery.svg';
 import reviewImg from '../../assets/review.png';
+import bicepsIcon from '../../assets/biceps-flexed.svg';
 
 export default function MasteryPage() {
   const dispatch = useAppDispatch();
@@ -48,21 +49,10 @@ export default function MasteryPage() {
   if (sessionComplete || queue.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center gap-6">
-        <img src={allDoneImg} alt="All Done" className="w-48 h-48 object-contain" />
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#1A202C', fontFamily: 'Poppins, sans-serif' }}>
-            Everything is done here!
-          </h1>
-          <p className="mt-2 text-sm" style={{ color: '#718096' }}>
-            You've completed today's review. Come back tomorrow for more!
-          </p>
-        </div>
-        <div
-          className="px-6 py-3 rounded-2xl text-sm font-medium"
-          style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}
-        >
-           You did great today! Keep it going
-        </div>
+        <img src={masteryIcon} alt="" className="w-48 h-48 object-contain" />
+        <h1 className="text-2xl font-bold" style={{ color: '#1A202C', fontFamily: 'Poppins, sans-serif' }}>
+          There are no scheduled words to review at the moment
+        </h1>
       </div>
     );
   }
@@ -74,10 +64,15 @@ export default function MasteryPage() {
   const canSubmit = userAnswer.trim().length > 0;
 
   const handleCheck = () => {
+    let finalAnswer = userAnswer;
+    if (currentItem.questionType === 1 || currentItem.questionType === 2) {
+      finalAnswer = String(userAnswer === currentItem.correctOption);
+    }
+
     dispatch(submitMasteryAnswer({
       wordId: currentItem.wordId,
       reviewId: currentItem.reviewId,
-      userAnswer,
+      userAnswer: finalAnswer,
       questionType: currentItem.questionType,
     }));
   };
@@ -103,11 +98,12 @@ export default function MasteryPage() {
       >
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
+            <h1 className="text-xl font-bold text-white flex items-center gap-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
+              <img src={bicepsIcon} alt="" className="w-6 h-6" />
               Daily Practice
             </h1>
 
-            <p className="text-white/60 text-xs">{currentIndex + 1} of {queue.length} vocabulary</p>
+            <p className="text-white/60 text-xs mt-1">{currentIndex + 1} of {queue.length} vocabulary</p>
           </div>
         </div>
 
@@ -123,6 +119,28 @@ export default function MasteryPage() {
       {/* Question */}
       <div className="flex-1 px-6 pt-6">
         {renderQuestion()}
+
+        {/* Mobile-only: Check/Next button below the options list */}
+        <div className="mt-4 flex justify-end md:hidden">
+          {!answered ? (
+            <button
+              onClick={handleCheck}
+              disabled={!canSubmit}
+              className="px-8 py-3 rounded-full text-base font-bold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
+              style={{ backgroundColor: canSubmit ? '#153C70' : '#718096', fontFamily: 'Poppins, sans-serif' }}
+            >
+              Check
+            </button>
+          ) : (
+            <button
+              onClick={() => { dispatch(setUserAnswer('')); dispatch(advanceToNext()); }}
+              className="px-8 py-3 rounded-full text-base font-bold text-white transition-all hover:opacity-90 active:scale-95"
+              style={{ backgroundColor: '#153C70', fontFamily: 'Poppins, sans-serif' }}
+            >
+              Next →
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Feedback after answer */}
@@ -143,13 +161,13 @@ export default function MasteryPage() {
             className="rounded-3xl p-5 shadow-sm"
             style={{ border: '2px solid #E2E8F0', backgroundColor: 'white' }}
           >
-            <DetailCardFull card={currentItem.cardData} />
+            <DetailCardFull card={currentItem.cardData} standalone />
           </div>
         </div>
       )}
 
-      {/* Bottom CTA */}
-      <div className="fixed bottom-5 left-250 right-0 px-6">
+      {/*  Desktop-only: Check/Next button below the options list */}
+      <div className="fixed bottom-5 left-180 right-0 px-6">
         {!answered ? (
           <button
             onClick={handleCheck}

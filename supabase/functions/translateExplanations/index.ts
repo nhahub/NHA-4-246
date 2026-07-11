@@ -20,13 +20,14 @@ serve(async (req) => {
 
     const prompt = `Translate the following explanation strings into ${nativeLang}.
 Preserve the original order exactly. Do NOT translate example sentences — only translate explanations.
-Return ONLY a valid JSON array of translated strings (same count as input), no markdown fences.
+Return a JSON object: { "translations": ["...", "...", ...] } with the same count and order as the input explanations.
 
 Input:
 ${JSON.stringify(explanations)}`;
 
     const raw    = await callGemini(prompt, { jsonMode: true });
-    const translated = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const translated = parsed.translations ?? parsed[Object.keys(parsed)[0]] ?? [];
 
     return new Response(JSON.stringify({ translated }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

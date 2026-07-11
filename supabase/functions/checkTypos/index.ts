@@ -27,7 +27,16 @@ Return ONLY valid JSON in one of these two shapes (no markdown fences):
 - Has typos: { "hasTypos": true, "suggestion": "<corrected text with only spelling fixed>" }`;
 
     const raw  = await callGemini(prompt, { jsonMode: true });
-    const result = JSON.parse(raw);
+    let result: { hasTypos: boolean; suggestion?: string };
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      console.error("[checkTypos] Gemini returned non-JSON:", raw);
+      return new Response(
+        JSON.stringify({ error: { type: "ai_error", message: "AI response could not be parsed. Please try again." } }),
+        { status: 502, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

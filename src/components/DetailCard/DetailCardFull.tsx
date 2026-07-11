@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
 import { DetailCardData } from '../../services/api/types';
 import { SaveButton } from './SaveButton';
+import { DetailCardWatchView } from './DetailCardWatchView';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { setMode, toggleTranslations } from '../../store/detailCardSlice';
+import { setMode } from '../../store/detailCardSlice';
 import { translateExplanations } from '../../services/api/mockApi';
 
 interface Props {
   card: DetailCardData;
   source?: 'watch' | 'explore' | 'selection' | 'manual';
+  /**
+   * When true the "▶" button swaps the card content for an inline
+   * DetailCardWatchView (back arrow + "Watch: headword" header + widget).
+   * Set this on all standalone usages (Explore, Mastery, VaultMonth).
+   * Leave false (default) for the modal-based flow in DetailCard.tsx,
+   * which dispatches setMode('watch') to trigger the global modal's watch state.
+   */
+  standalone?: boolean;
 }
 
 /** Renders the example sentence with _headword_ bolded */
@@ -24,17 +33,32 @@ function ExampleSentence({ text }: { text: string }) {
   );
 }
 
-export function DetailCardFull({ card, source }: Props) {
+export function DetailCardFull({ card, source, standalone = false }: Props) {
   const dispatch = useAppDispatch();
-  const { translationsVisible } = useAppSelector(s => s.detailCard);
   const { nativeLanguage, targetLanguage } = useAppSelector(s => s.user);
+  const [translationsVisible, setTranslationsVisible] = useState(false);
   const [translations, setTranslations] = useState<string[]>([]);
   const [translating, setTranslating] = useState(false);
+  // Standalone watch-view state — only used when standalone === true
+  const [showYouglish, setShowYouglish] = useState(false);
   const showTranslateIcon = nativeLanguage !== targetLanguage;
 
+  // Standalone mode: full content-swap to DetailCardWatchView
+  if (standalone && showYouglish) {
+    return (
+      <DetailCardWatchView
+        card={card}
+        targetLanguage={targetLanguage}
+        onBack={() => setShowYouglish(false)}
+      />
+    );
+  }
+
   const handleTranslate = async () => {
-    dispatch(toggleTranslations());
-    if (!translationsVisible && translations.length === 0) {
+    const newVisible = !translationsVisible;
+    setTranslationsVisible(newVisible);
+
+    if (newVisible && translations.length === 0) {
       setTranslating(true);
       try {
         const result = await translateExplanations({
@@ -45,6 +69,14 @@ export function DetailCardFull({ card, source }: Props) {
       } finally {
         setTranslating(false);
       }
+    }
+  };
+
+  const handleWatch = () => {
+    if (standalone) {
+      setShowYouglish(true);
+    } else {
+      dispatch(setMode('watch'));
     }
   };
 
@@ -106,19 +138,24 @@ export function DetailCardFull({ card, source }: Props) {
       {/* Action buttons */}
       <div className="flex gap-2.5">
         <button
-          onClick={() => dispatch(setMode('watch'))}
+          onClick={handleWatch}
+          title="Watch on YouGlish"
+          aria-label="Watch on YouGlish"
           className="flex-1 py-2.5 rounded-full text-sm font-semibold flex items-center justify-center gap-1.5 transition-all hover:opacity-90 active:scale-95"
           style={{ backgroundColor: '#F4F7FB', color: '#153C70', fontFamily: 'Poppins, sans-serif', border: '2px solid #E2E8F0' }}
         >
-          ▶ Watch
+          ▶
         </button>
+        {/* PRONOUNCE — TEMPORARILY DISABLED (SpeechSuper integration paused)
+        Re-enable by restoring the button below and the routes/nav in App.tsx + BottomNav.tsx
         <button
           onClick={() => dispatch(setMode('pronounce'))}
           className="flex-1 py-2.5 rounded-full text-sm font-semibold flex items-center justify-center gap-1.5 transition-all hover:opacity-90 active:scale-95"
           style={{ backgroundColor: '#F4F7FB', color: '#153C70', fontFamily: 'Poppins, sans-serif', border: '2px solid #E2E8F0' }}
         >
-          🎤 Pronounce
+          🎤
         </button>
+        */}
         <SaveButton card={card} source={source} />
       </div>
     </div>

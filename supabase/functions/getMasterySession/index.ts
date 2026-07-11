@@ -11,12 +11,20 @@ serve(async (req) => {
 
   try {
     const supabase = getSupabaseClient(req);
-    const userId   = await requireAuth(supabase);
+    let userId: string;
+    try {
+      userId = await requireAuth(supabase);
+    } catch {
+      return new Response(JSON.stringify({ error: { type: "unauthorized", message: "Missing or invalid Authorization header" } }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Fetch up to DAILY_REVIEW_CAP due review items
+    // Fetch up to DAILY_REVIEW_CAP due review items (include current_mcq for cache check)
     const { data: queueRows, error: qErr } = await supabase
       .from("review_queue")
-      .select("id, word_id, question_type, scheduled_for")
+      .select("id, word_id, question_type, scheduled_for, current_mcq")
       .eq("user_id", userId)
       .eq("status", "pending")
       .lte("scheduled_for", new Date().toISOString())
@@ -41,7 +49,7 @@ serve(async (req) => {
 
     const wordMap = new Map(words?.map((w) => [w.id, w]) ?? []);
 
-    // Generate question content via Gemini for each queue item
+    // Generate (or load from cache) question content for each queue item
     const queue = await Promise.all(
       queueRows.map(async (item) => {
         const word = wordMap.get(item.word_id);
@@ -49,29 +57,116 @@ serve(async (req) => {
 
         let questionType = item.question_type;
         let questionContent: unknown = null;
+        let fromCache = false;
 
-        try {
-          questionContent = await generateQuestion(word, questionType);
-        } catch {
-          // Fallback to type 1 (MCQ) if generation fails for types 3-6
-          if (questionType >= 3) {
-            questionType = questionType % 2 === 0 ? 2 : 1;
-            try {
-              questionContent = await generateQuestion(word, questionType);
-            } catch {
+        // ── Cache check ────────────────────────────────────────────────
+        if (item.current_mcq !== null && item.current_mcq !== undefined) {
+          // Cache hit: reuse previously generated question, skip Gemini
+          questionContent = item.current_mcq;
+          fromCache = true;
+        } else {
+          // Cache miss: call Gemini, then persist result to DB
+          try {
+            questionContent = await generateQuestion(word, questionType);
+          } catch {
+            if (questionType >= 3) {
+              // For audio/production types, fall back to MCQ (type 1)
+              questionType = questionType % 2 === 0 ? 2 : 1;
+              try {
+                questionContent = await generateQuestion(word, questionType);
+              } catch {
+                questionContent = { fallback: true };
+              }
+            } else {
+              // For types 1 and 2 Gemini failure: synthesise options from the
+              // word's own synonyms so the card is always renderable.
               questionContent = { fallback: true };
+            }
+          }
+
+          // ── Save to cache (best-effort; never blocks the response) ─────
+          if (questionContent && !(questionContent as Record<string, unknown>).fallback) {
+            try {
+              const { error: cacheErr } = await supabase
+                .from("review_queue")
+                .update({ current_mcq: questionContent })
+                .eq("id", item.id);
+              if (cacheErr) {
+                console.error("[getMasterySession] Failed to cache MCQ for review", item.id, cacheErr.message);
+              }
+            } catch (cacheEx) {
+              console.error("[getMasterySession] Exception caching MCQ for review", item.id, cacheEx);
             }
           }
         }
 
-        return {
+        // ── Flatten questionContent into the ReviewItem top-level fields ─
+        // This logic is identical regardless of cache hit or miss.
+        const qc = questionContent as Record<string, unknown> | null;
+        const flat: Record<string, unknown> = {
           reviewId:     item.id,
           wordId:       item.word_id,
           headword:     word.headword,
           questionType,
-          questionContent,
-          scheduledFor: item.scheduled_for,
+          cardData: {
+            id:           item.word_id,
+            headword:     word.headword,
+            synonyms:     word.native_synonyms ?? [],
+            contexts:     (word.word_contexts ?? []).map((c: { label: string; explanation: string; example: string }) => ({
+              label:       c.label,
+              explanation: c.explanation,
+              example:     c.example,
+            })),
+            stage:        word.stage,
+            stage6_streak: 0,
+            active:       true,
+          },
         };
+
+        if (qc && !qc.fallback) {
+          if (questionType === 1) {
+            // { question, options, correctIndex } → mcqOptions + correctOption
+            const opts = qc.options as string[] | undefined;
+            const idx  = qc.correctIndex as number | undefined;
+            flat.mcqOptions    = opts;
+            flat.correctOption = (opts && idx !== undefined) ? opts[idx] : undefined;
+          } else if (questionType === 2) {
+            // { question, options, correctIndex } → reversedDefinition + reversedOptions + correctOption
+            const opts = qc.options as string[] | undefined;
+            const idx  = qc.correctIndex as number | undefined;
+            flat.reversedDefinition = qc.question;
+            flat.reversedOptions    = opts;
+            flat.correctOption      = (opts && idx !== undefined) ? opts[idx] : undefined;
+          } else if (questionType === 3) {
+            // { instruction, answer } — type 3 is audio; audioUrl cannot be provided server-side
+            // The frontend uses audioUrl for TTS; leave it undefined (client will use headword)
+            flat.audioUrl = undefined;
+          } else if (questionType === 4) {
+            // { sentence, answer } → fillSentence
+            flat.fillSentence = qc.sentence;
+          } else if (questionType === 5) {
+            // { question, rubric, word } → nuancedPrompt
+            flat.nuancedPrompt = qc.question;
+          } else if (questionType === 6) {
+            // { instruction, word } → productionPrompt
+            flat.productionPrompt = qc.instruction;
+          }
+        } else if (questionType === 1 || questionType === 2) {
+          // Gemini failed — build minimal playable options from the word's synonyms.
+          // Correct answer is the headword (type 1) or the first synonym (type 2).
+          const distractors = (word.native_synonyms ?? []).slice(0, 3);
+          const opts = [word.headword, ...distractors].slice(0, 4);
+          if (questionType === 1) {
+            flat.mcqOptions    = opts;
+            flat.correctOption = word.headword;
+          } else {
+            flat.reversedDefinition = (word.native_synonyms ?? []).join(", ") || word.headword;
+            flat.reversedOptions    = opts;
+            flat.correctOption      = word.headword;
+          }
+        }
+
+        return flat;
       })
     );
 

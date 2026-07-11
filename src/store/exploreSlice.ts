@@ -24,9 +24,12 @@ const initialState: ExploreState = {
   error: null,
 };
 
-export const loadExploreSuggestions = createAsyncThunk('explore/load', async () => {
-  return await getExploreSuggestions();
-});
+export const loadExploreSuggestions = createAsyncThunk(
+  'explore/load',
+  async (forceRefresh: boolean = false) => {
+    return await getExploreSuggestions(forceRefresh);
+  }
+);
 
 export const searchExplore = createAsyncThunk(
   'explore/search',

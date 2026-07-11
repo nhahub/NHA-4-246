@@ -10,9 +10,11 @@ import watchReducer from './watchSlice';
 import exploreReducer from './exploreSlice';
 import pronounceReducer from './pronounceSlice';
 import uiReducer from './uiSlice';
+import authReducer from './authSlice';
 
 export const store = configureStore({
   reducer: {
+    auth: authReducer,
     user: userReducer,
     words: wordsReducer,
     detailCard: detailCardReducer,
@@ -27,7 +29,7 @@ export const store = configureStore({
     getDefault({ serializableCheck: { ignoredActions: ['pronounce/assess/pending'] } }),
 });
 
-// Persist user state to localStorage
+// Persist user + auth state to localStorage
 store.subscribe(() => {
   try {
     const { user } = store.getState();
@@ -40,3 +42,4 @@ export type AppDispatch = typeof store.dispatch;
 
 export const useAppDispatch: () => AppDispatch = useDispatch;
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+

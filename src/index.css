@@ -87,3 +87,14 @@ body {
   background: rgba(14, 41, 84, 0.55);
   backdrop-filter: blur(4px);
 }
+
+/* Watch page — video card thumbnail responsive width */
+.video-card-thumb {
+  width: 37%;   /* ~37% of the card on mobile → plenty of room for the title */
+}
+
+@media (min-width: 768px) {
+  .video-card-thumb {
+    width: 220px; /* restore original desktop size */
+  }
+}

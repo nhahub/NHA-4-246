@@ -228,7 +228,7 @@ export function PronunciationRecorder({ word, targetLang, onResult }: Props) {
 
       {state === 'requesting' && (
         <div className="flex flex-col items-center gap-2">
-          <LoadingSpinner size="md" label="Requesting mic access..." />
+          <LoadingSpinner label="Requesting mic access..." />
         </div>
       )}
 

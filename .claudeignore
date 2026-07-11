@@ -1,0 +1,19 @@
+# Dependencies & Builds (Always ignore)
+node_modules/
+dist/
+build/
+.next/
+
+# Lockfiles (Massive and useless for logic debugging)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Supabase Local State
+supabase/.branches/
+supabase/functions/.local/
+
+# Highly Specific Large Data (Don't block all JSONs)
+*.csv
+# If you have one specific massive mock file, name it directly instead of blocking the whole folder:
+# src/mockData/massive-dataset.json

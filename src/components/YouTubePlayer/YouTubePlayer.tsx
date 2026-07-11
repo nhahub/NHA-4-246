@@ -12,6 +12,14 @@ interface Props {
   onPause?: () => void;
   onPlay?: () => void;
   onTimeUpdate?: (time: number) => void;
+  /** Called whenever the user clicks the video area to toggle play/pause. */
+  onTogglePlay?: () => void;
+  /**
+   * Optional ref that will be populated with the togglePlay function once
+   * the player is mounted. Use this to imperatively toggle playback from
+   * outside the component (e.g. from a sibling CaptionBox).
+   */
+  togglePlayRef?: React.MutableRefObject<() => void>;
 }
 
 let apiLoaded = false;
@@ -34,7 +42,7 @@ function loadYouTubeApi(): Promise<void> {
   });
 }
 
-export function YouTubePlayer({ videoId, onPause, onPlay, onTimeUpdate }: Props) {
+export function YouTubePlayer({ videoId, onPause, onPlay, onTimeUpdate, onTogglePlay, togglePlayRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
@@ -95,7 +103,12 @@ export function YouTubePlayer({ videoId, onPause, onPlay, onTimeUpdate }: Props)
     if (!playerRef.current) return;
     if (isPlaying) playerRef.current.pauseVideo();
     else playerRef.current.playVideo();
-  }, [isPlaying]);
+    onTogglePlay?.();
+  }, [isPlaying, onTogglePlay]);
+
+  // Populate the external ref so sibling components (e.g. CaptionBox) can
+  // call togglePlay without needing the player ref themselves.
+  if (togglePlayRef) togglePlayRef.current = togglePlay;
 
   const seek = useCallback((val: number) => {
     playerRef.current?.seekTo(val, true);
@@ -115,12 +128,36 @@ export function YouTubePlayer({ videoId, onPause, onPlay, onTimeUpdate }: Props)
 
   return (
     <div className="flex flex-col rounded-2xl overflow-hidden shadow-lg" style={{ border: '2px solid #E2E8F0' }}>
-      {/* Video */}
-      <div
-        ref={containerRef}
-        className="relative bg-black"
-        style={{ paddingBottom: '56.25%', height: 0 }}
-      />
+      {/* Video — 16:9 aspect-ratio wrapper.
+          The YouTube IFrame API appends the iframe as a child element with
+          width/height attributes set to '100%'. For those percentages to
+          resolve correctly the iframe must be absolutely positioned inside a
+          relatively-positioned container that has actual dimensions.
+          Using paddingBottom:56.25% + height:0 on the outer div gives the
+          container its height; the inner div stretches to fill it absolutely,
+          and the YouTube API-created iframe inherits its full size.
+          A transparent click-catcher sits on top so clicking the video area
+          calls togglePlay without intercepting the iframe's own events. */}
+      <div className="relative bg-black" style={{ paddingBottom: '56.25%', height: 0 }}>
+        {/* Inner div: fills the padding-box absolutely so the iframe has a
+            real pixel height to inherit from via height:'100%' */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+        />
+        {/* Transparent click-catcher — sits above the iframe, passes visual
+            content through (no background), but captures pointer events so
+            clicking the video area toggles play/pause. */}
+        {playerReady && (
+          <div
+            className="absolute inset-0 z-10 cursor-pointer"
+            onClick={togglePlay}
+            aria-label={isPlaying ? 'Pause video' : 'Play video'}
+            role="button"
+            tabIndex={-1}
+          />
+        )}
+      </div>
 
       {/* Custom controls */}
       {playerReady && (

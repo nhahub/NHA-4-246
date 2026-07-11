@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { VaultWord } from '../services/api/types';
 import { getVaultMonths, getVaultWords, generateVaultParagraph as apiGenParagraph } from '../services/api/mockApi';
+import { removeWordThunk } from './wordsSlice';
 
 interface VaultState {
   months: { month: string; wordCount: number }[];
@@ -56,6 +57,12 @@ const vaultSlice = createSlice({
   },
   extraReducers: builder => {
     builder
+      .addCase(removeWordThunk.fulfilled, (state, action) => {
+        const id = action.payload;
+        for (const month in state.wordsByMonth) {
+          state.wordsByMonth[month] = state.wordsByMonth[month].filter(w => w.id !== id);
+        }
+      })
       .addCase(loadVaultMonths.pending, state => { state.monthsLoading = true; state.error = null; })
       .addCase(loadVaultMonths.fulfilled, (state, action) => {
         state.monthsLoading = false; state.months = action.payload;

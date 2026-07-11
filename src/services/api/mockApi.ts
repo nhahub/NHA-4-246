@@ -1,8 +1,8 @@
-// ─── Mock Service Layer ───────────────────────────────────────────────────────
-// INTEGRATION POINTS: Replace each function body with a real Supabase/edge-function
-// call. Function signatures MUST NOT change — the entire UI depends on them.
-// See README.md for the full list of integration points.
+// ─── Live Service Layer ───────────────────────────────────────────────────────
+// All functions call the real Supabase backend (DB or edge functions).
+// Exported signatures are frozen — the entire UI depends on them exactly.
 
+import { supabase } from '../../lib/supabase';
 import {
   DetailCardData,
   ReviewItem,
@@ -18,516 +18,433 @@ import {
   GenerateVaultParagraphResult,
 } from './types';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Error normalisation ──────────────────────────────────────────────────────
+// Every component/hook that consumes these functions expects errors to be thrown
+// as plain Error objects (the Redux thunks catch them and store message strings).
+// For edge function calls, map the top-level `error` from functions.invoke into
+// a thrown Error so error boundaries see a consistent surface.
 
-function delay(min = 300, max = 800): Promise<void> {
-  return new Promise(res => setTimeout(res, Math.random() * (max - min) + min));
+function invokeError(err: { message: string } | null | undefined): never {
+  throw new Error(err?.message ?? 'An unknown error occurred.');
 }
 
-/** Randomly throw ~10% of the time to test error states */
-function maybeThrow(): void {
-  if (Math.random() < 0.08) {
-    throw new Error('Service currently busy. Please try again.');
+// ─── Dev-only caching ─────────────────────────────────────────────────────────
+// Caches AI edge function responses in memory during development to save quota.
+// This is entirely bypassed in production builds.
+
+const isDev = import.meta.env.DEV;
+const devCache = new Map<string, any>();
+
+if (isDev) {
+  // @ts-ignore
+  window.clearDevCache = () => {
+    devCache.clear();
+    console.log('[dev-cache] Cache cleared.');
+  };
+}
+
+/**
+ * Wraps a fetcher function with an in-memory cache.
+ * Key is derived from function name and serialized payload.
+ * In production, it completely bypasses the cache.
+ * Only successful responses are cached.
+ */
+async function withDevCache<T>(
+  functionName: string,
+  payload: any,
+  fetcher: () => Promise<T>,
+  bypassCache = false
+): Promise<T> {
+  if (!isDev) return fetcher();
+
+  const key = `${functionName}:${JSON.stringify(payload)}`;
+  if (!bypassCache && devCache.has(key)) {
+    console.log(`[dev-cache] ${functionName} served from cache`, payload);
+    // Return a deep clone so mutations by the caller don't affect the cache
+    return JSON.parse(JSON.stringify(devCache.get(key)));
   }
+
+  const result = await fetcher();
+  // If we reach here, the fetcher didn't throw, meaning it was successful.
+  devCache.set(key, JSON.parse(JSON.stringify(result)));
+  return result;
 }
-
-let wordIdCounter = 100;
-function newId(): string {
-  return `word-${++wordIdCounter}-${Date.now()}`;
-}
-
-// ─── Seed mock data ───────────────────────────────────────────────────────────
-
-const MOCK_CARDS: DetailCardData[] = [
-  {
-    id: 'word-1',
-    headword: 'ephemeral',
-    synonyms: ['éphémère', 'fugace', 'transitoire'],
-    contexts: [
-      {
-        label: 'General',
-        explanation: 'Lasting for a very short time; transient.',
-        example: 'The _ephemeral_ beauty of cherry blossoms makes them all the more precious.',
-      },
-      {
-        label: 'Figurative',
-        explanation: 'Describes moments or feelings that quickly pass.',
-        example: 'Fame can be _ephemeral_ — here today and forgotten tomorrow.',
-      },
-    ],
-    stage: 2, stage6_streak: 0, active: true, savedAt: '2026-05-15T10:00:00Z', source: 'explore',
-    nativeTranslation: 'éphémère',
-  },
-  {
-    id: 'word-2',
-    headword: 'serendipity',
-    synonyms: ['sérendipité', 'chance heureuse', 'bonne fortune'],
-    contexts: [
-      {
-        label: 'General',
-        explanation: 'The occurrence of happy accidents or pleasant surprises.',
-        example: 'Finding my best friend was pure _serendipity_ — we were both reaching for the same book.',
-      },
-    ],
-    stage: 1, stage6_streak: 0, active: true, savedAt: '2026-05-20T14:00:00Z', source: 'watch',
-    nativeTranslation: 'sérendipité',
-  },
-  {
-    id: 'word-3',
-    headword: 'resilient',
-    synonyms: ['résilient', 'robuste', 'tenace'],
-    contexts: [
-      {
-        label: 'Personal quality',
-        explanation: 'Able to recover quickly from difficulties; tough.',
-        example: 'She remained _resilient_ despite the repeated setbacks in her career.',
-      },
-      {
-        label: 'Materials',
-        explanation: 'Able to recoil or spring back into shape after bending.',
-        example: 'The _resilient_ material bounced back to its original form.',
-      },
-    ],
-    stage: 3, stage6_streak: 0, active: true, savedAt: '2026-06-01T09:00:00Z', source: 'manual',
-    nativeTranslation: 'résilient',
-  },
-  {
-    id: 'word-4',
-    headword: 'ubiquitous',
-    synonyms: ['omniprésent', 'universel', 'répandu'],
-    contexts: [
-      {
-        label: 'General',
-        explanation: 'Present, appearing, or found everywhere.',
-        example: 'Smartphones have become so _ubiquitous_ that life without one feels impossible.',
-      },
-    ],
-    stage: 0, stage6_streak: 0, active: true, savedAt: '2026-06-10T16:00:00Z', source: 'selection',
-    nativeTranslation: 'omniprésent',
-  },
-  {
-    id: 'word-5',
-    headword: 'melancholy',
-    synonyms: ['mélancolie', 'tristesse douce', 'nostalgie'],
-    contexts: [
-      {
-        label: 'Emotional state',
-        explanation: 'A feeling of pensive sadness, typically with no obvious cause.',
-        example: 'A sense of _melancholy_ swept over him as he looked at old photographs.',
-      },
-      {
-        label: 'Literary',
-        explanation: 'Used to describe a pervasive mood or atmosphere in writing.',
-        example: 'The novel is drenched in _melancholy_, reflecting the author\'s own losses.',
-      },
-    ],
-    stage: 4, stage6_streak: 0, active: true, savedAt: '2026-04-05T11:00:00Z', source: 'explore',
-    nativeTranslation: 'mélancolie',
-  },
-];
-
-const MOCK_VIDEOS: VideoItem[] = [
-  {
-    videoId: 'dQw4w9WgXcQ',
-    title: 'Advanced English Vocabulary — Academic Words',
-    channelName: 'English with Lucy',
-    thumbnailUrl: `https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg`,
-    duration: '14:32',
-    category: 'education',
-    language: 'en',
-  },
-  {
-    videoId: 'ZZ5LpwO-An4',
-    title: 'TED Talk: The Power of Words',
-    channelName: 'TED',
-    thumbnailUrl: `https://img.youtube.com/vi/ZZ5LpwO-An4/hqdefault.jpg`,
-    duration: '18:04',
-    category: 'talks',
-    language: 'en',
-  },
-  {
-    videoId: 'kJQP7kiw5Fk',
-    title: 'Apprendre le français — Vocabulaire courant',
-    channelName: 'Français avec Pierre',
-    thumbnailUrl: `https://img.youtube.com/vi/kJQP7kiw5Fk/hqdefault.jpg`,
-    duration: '22:10',
-    category: 'education',
-    language: 'fr',
-  },
-  {
-    videoId: 'OPf0YbXqDm0',
-    title: 'BBC Documentary — Nature & Language',
-    channelName: 'BBC Earth',
-    thumbnailUrl: `https://img.youtube.com/vi/OPf0YbXqDm0/hqdefault.jpg`,
-    duration: '09:55',
-    category: 'documentary',
-    language: 'en',
-  },
-];
-
-const MOCK_PHONEMES: PhonemeStatus[] = [
-  { phoneme: '/θ/', status: 'wrong' },
-  { phoneme: '/ð/', status: 'wrong' },
-  { phoneme: '/ɪ/', status: 'good' },
-  { phoneme: '/æ/', status: 'good' },
-  { phoneme: '/ʌ/', status: 'good' },
-  { phoneme: '/ɑː/', status: 'excellent' },
-  { phoneme: '/iː/', status: 'excellent' },
-  { phoneme: '/p/', status: 'excellent' },
-  { phoneme: '/b/', status: 'excellent' },
-  { phoneme: '/t/', status: 'excellent' },
-  { phoneme: '/d/', status: 'excellent' },
-  { phoneme: '/k/', status: 'excellent' },
-  { phoneme: '/ɒ/', status: 'good' },
-  { phoneme: '/uː/', status: 'good' },
-  { phoneme: '/ʃ/', status: 'wrong' },
-];
-
-const MOCK_CAPTIONS: CaptionLine[] = [
-  { startMs: 0,     endMs: 3200,  text: 'Welcome to this fascinating lesson on advanced English vocabulary.' },
-  { startMs: 3200,  endMs: 7000,  text: 'Today we\'ll explore words that are both ephemeral and profound.' },
-  { startMs: 7000,  endMs: 11500, text: 'Our first word is "serendipity" — the happy accident of discovery.' },
-  { startMs: 11500, endMs: 15000, text: 'Think about moments when something unexpected changed your life.' },
-  { startMs: 15000, endMs: 19000, text: 'A resilient person bounces back from adversity with renewed strength.' },
-  { startMs: 19000, endMs: 24000, text: 'In today\'s ubiquitous digital age, resilience is more important than ever.' },
-  { startMs: 24000, endMs: 29000, text: 'Let\'s look at the word "melancholy" — a bittersweet form of sadness.' },
-  { startMs: 29000, endMs: 33000, text: 'The melancholy beauty of autumn leaves inspires poets worldwide.' },
-  { startMs: 33000, endMs: 38000, text: 'Now try selecting any word you don\'t know — tap the bee icon to look it up!' },
-];
-
-// ─── Locally tracked saved words (in-memory, simulating a database) ──────────
-const savedWordIds = new Set<string>(['word-1', 'word-2', 'word-3', 'word-4', 'word-5']);
 
 // ─── API Implementation ───────────────────────────────────────────────────────
 
-/** INTEGRATION POINT: Replace with Supabase edge function call */
 export async function generateDetailCard(input: {
   text: string;
   nativeLang: string;
   targetLang: string;
 }): Promise<GenerateDetailCardResult> {
-  await delay(600, 1200);
-  maybeThrow();
+  return withDevCache('generateDetailCard', input, async () => {
+    const { data, error } = await supabase.functions.invoke('generateDetailCard', {
+      body: { text: input.text, nativeLang: input.nativeLang, targetLang: input.targetLang },
+    });
+    if (error) invokeError(error);
 
-  const headword = input.text.trim();
-  const wordCount = headword.split(/\s+/).length;
-  if (wordCount > 50) {
-    return { mode: 'too_long', card: null };
-  }
+    // Edge function may return { error: { type, message } } with a 2xx-ish status in some edge cases.
+    // Guard against this so we don't crash on data.card access below.
+    if (data?.error) {
+      throw new Error(data.error.message ?? 'AI provider error');
+    }
 
-  // Simulate simplified mode for longer multi-word phrases (3+ words)
-  if (wordCount >= 3 && Math.random() < 0.4) {
-    const simplified: DetailCardData = {
-      id: newId(),
-      headword,
-      synonyms: [],
-      contexts: [],
-      stage: 0, stage6_streak: 0, active: true,
-      nativeTranslation: `[Translation of "${headword}"]`,
-      source: 'selection',
-    };
-    return { mode: 'simplified', card: simplified };
-  }
-
-  // Try to find a matching seed card (exact or partial match on headword)
-  const exactMatch = MOCK_CARDS.find(
-    c => c.headword.toLowerCase() === headword.toLowerCase()
-  );
-  const seed = exactMatch ?? MOCK_CARDS[Math.floor(Math.random() * MOCK_CARDS.length)];
-
-  // Build a card whose headword IS the searched text; keep contexts/synonyms
-  // coherent by scaling the seed's examples to use the real headword
-  const updatedContexts = seed.contexts.map(ctx => ({
-    ...ctx,
-    example: ctx.example.replace(
-      new RegExp(`_${seed.headword}_`, 'gi'),
-      `_${headword}_`
-    ),
-  }));
-
-  const card: DetailCardData = {
-    ...seed,
-    id: newId(),
-    headword,
-    contexts: exactMatch ? seed.contexts : updatedContexts,
-    source: 'selection',
-    savedAt: undefined,
-  };
-  return { mode: 'full', card };
+    // Edge function returns { mode, card } — shape matches GenerateDetailCardResult exactly.
+    // Card from the backend may be missing SRS fields (stage, stage6_streak, active) —
+    // supply defaults so the frontend type is fully satisfied.
+    if (data.card) {
+      data.card = {
+        stage: 0,
+        stage6_streak: 0,
+        active: true,
+        synonyms: [],
+        contexts: [],
+        ...data.card,
+      };
+    }
+    return data as GenerateDetailCardResult;
+  });
 }
 
-/** INTEGRATION POINT: Replace with Supabase edge function call */
 export async function checkTypos(input: { text: string }): Promise<{
   hasTypos: boolean;
   suggestion?: string;
 }> {
-  await delay(300, 600);
-  // Simulate typo detection — trigger on very short all-lowercase with common patterns
-  const text = input.text;
-  if (text === 'ephemral') return { hasTypos: true, suggestion: 'ephemeral' };
-  if (text === 'serendippity') return { hasTypos: true, suggestion: 'serendipity' };
-  if (text === 'resillent') return { hasTypos: true, suggestion: 'resilient' };
-  // Randomly flag 5% of inputs to make it testable
-  if (Math.random() < 0.05) {
-    return { hasTypos: true, suggestion: `${text}s` };
-  }
-  return { hasTypos: false };
+  return withDevCache('checkTypos', input, async () => {
+    const { data, error } = await supabase.functions.invoke('checkTypos', {
+      body: { text: input.text },
+    });
+    if (error) invokeError(error);
+    return data as { hasTypos: boolean; suggestion?: string };
+  });
 }
 
-/** INTEGRATION POINT: Replace with Supabase edge function call */
 export async function translateExplanations(input: {
   explanations: string[];
   nativeLang: string;
 }): Promise<{ translated: string[] }> {
-  await delay(400, 800);
-  maybeThrow();
-  const translated = input.explanations.map(
-    exp => `[${input.nativeLang}] ${exp}`
-  );
-  return { translated };
+  return withDevCache('translateExplanations', input, async () => {
+    const { data, error } = await supabase.functions.invoke('translateExplanations', {
+      body: { explanations: input.explanations, nativeLang: input.nativeLang },
+    });
+    if (error) invokeError(error);
+    return data as { translated: string[] };
+  });
 }
 
-/** INTEGRATION POINT: Replace with YouGlish API or Supabase edge function */
-export async function getYouglishVideo(input: {
-  word: string;
-  targetLang: string;
-}): Promise<{ videoUrl: string | null }> {
-  await delay(400, 700);
-  // Return null ~20% of the time to test empty state
-  if (Math.random() < 0.2) return { videoUrl: null };
-  const videoIds = ['dQw4w9WgXcQ', 'ZZ5LpwO-An4', 'kJQP7kiw5Fk'];
-  const id = videoIds[Math.floor(Math.random() * videoIds.length)];
-  return { videoUrl: `https://www.youtube.com/embed/${id}` };
-}
+// getYouglishVideo removed — YouGlish is now rendered client-side via the YouGlish JS widget.
 
-/** INTEGRATION POINT: Replace with SpeechSuper API call via Supabase edge function */
 export async function assessPronunciation(input: {
   audioBlob: Blob;
   word: string;
   targetLang: string;
 }): Promise<PronunciationResult> {
-  await delay(800, 1500);
-  maybeThrow();
-  const score = Math.floor(Math.random() * 40) + 55; // 55–94
-  const phonemes = input.word
-    .toLowerCase()
-    .split('')
-    .filter(c => /[a-z]/.test(c))
-    .slice(0, 5)
-    .map(c => ({
-      phoneme: `/${c}/`,
-      status: (score > 80 ? 'excellent' : score > 60 ? 'good' : 'wrong') as 'excellent' | 'good' | 'wrong',
-    }));
-  return { score, phonemeBreakdown: phonemes };
+  // The edge function reads req.formData() — must send as FormData, not JSON.
+  const form = new FormData();
+  form.append('audio', input.audioBlob, 'recording.mp3');
+  form.append('word', input.word);
+  form.append('targetLang', input.targetLang);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const jwt = session?.access_token;
+
+  // functions.invoke does not support FormData bodies directly, so use fetch.
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/assessPronunciation`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+    },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message ?? `assessPronunciation HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<PronunciationResult>;
 }
 
-/** INTEGRATION POINT: Replace with Supabase insert */
 export async function saveWord(input: {
   word: DetailCardData;
   source: 'manual' | 'watch' | 'explore' | 'selection';
 }): Promise<{ wordId: string }> {
-  await delay(300, 500);
-  savedWordIds.add(input.word.id);
-  return { wordId: input.word.id };
+  const { data, error } = await supabase.functions.invoke('saveWord', {
+    body: { word: input.word, source: input.source },
+  });
+  if (error) invokeError(error);
+  return data as { wordId: string };
 }
 
-/** INTEGRATION POINT: Replace with Supabase delete */
 export async function removeWord(input: { wordId: string }): Promise<{ success: boolean }> {
-  await delay(300, 500);
-  savedWordIds.delete(input.wordId);
-  return { success: true };
+  const { data, error } = await supabase.functions.invoke('removeWord', {
+    body: { wordId: input.wordId },
+  });
+  if (error) invokeError(error);
+  return data as { success: boolean };
 }
 
-/** INTEGRATION POINT: Replace with Supabase query + SRS logic */
 export async function getMasterySession(): Promise<{
   queue: ReviewItem[];
   totalToday: number;
 }> {
-  await delay(400, 800);
-  const queue: ReviewItem[] = MOCK_CARDS.slice(0, 5).map((card, i) => {
-    const types: (1 | 2 | 3 | 4 | 5 | 6)[] = [1, 2, 4, 5, 6, 3];
-    const qType = types[i % types.length];
-    return {
-      reviewId: `review-${i}-${Date.now()}`,
-      wordId: card.id,
-      headword: card.headword,
-      questionType: qType,
-      mcqOptions: qType === 1 ? [
-        card.contexts[0]?.explanation || 'Definition A',
-        'A completely different meaning',
-        'An unrelated concept',
-        'Something else entirely',
-      ] : undefined,
-      correctOption: qType === 1 ? (card.contexts[0]?.explanation || 'Definition A') : undefined,
-      reversedDefinition: qType === 2 ? card.contexts[0]?.explanation : undefined,
-      reversedOptions: qType === 2 ? [card.headword, 'serendipity', 'resilient', 'ubiquitous'] : undefined,
-      fillSentence: qType === 4 ? card.contexts[0]?.example?.replace(
-        new RegExp(`_${card.headword}_`, 'i'), '___'
-      ) : undefined,
-      nuancedPrompt: qType === 5 ? `Write a sentence using "${card.headword}" in a nuanced context.` : undefined,
-      productionPrompt: qType === 6 ? `Write your own sentence using "${card.headword}".` : undefined,
-      cardData: card,
-    };
-  });
-  return { queue, totalToday: 12 };
+  const { data, error } = await supabase.functions.invoke('getMasterySession', { body: {} });
+  if (error) invokeError(error);
+  return data as { queue: ReviewItem[]; totalToday: number };
 }
 
-/** INTEGRATION POINT: Replace with Supabase SRS update */
 export async function submitAnswer(input: {
   wordId: string;
   reviewId: string;
   userAnswer: string;
   questionType: number;
 }): Promise<{ isCorrect: boolean; newStage: number }> {
-  await delay(300, 600);
-  // Simple mock: correct if answer is non-empty and longer than 2 chars
-  const isCorrect = input.userAnswer.trim().length > 2 && Math.random() > 0.35;
-  return { isCorrect, newStage: isCorrect ? 2 : 1 };
+  const { data, error } = await supabase.functions.invoke('submitAnswer', {
+    body: {
+      wordId: input.wordId,
+      reviewId: input.reviewId,
+      userAnswer: input.userAnswer,
+      questionType: input.questionType,
+    },
+  });
+  if (error) invokeError(error);
+  return data as { isCorrect: boolean; newStage: number };
 }
 
-/** INTEGRATION POINT: Replace with Supabase query */
 export async function getVaultMonths(): Promise<{ month: string; wordCount: number }[]> {
-  await delay(300, 600);
-  return [
-    { month: '2026-06', wordCount: 2 },
-    { month: '2026-05', wordCount: 2 },
-    { month: '2026-04', wordCount: 1 },
-  ];
+  const { data, error } = await supabase.functions.invoke('getVaultMonths', { body: {} });
+  if (error) invokeError(error);
+  // Edge function returns an array directly (not wrapped in an object).
+  return data as { month: string; wordCount: number }[];
 }
 
-/** INTEGRATION POINT: Replace with Supabase query */
 export async function getVaultWords(month: string): Promise<VaultWord[]> {
-  await delay(300, 700);
-  const allWords: VaultWord[] = MOCK_CARDS.map(card => ({
-    id: card.id,
-    headword: card.headword,
-    nativeTranslation: card.nativeTranslation || card.synonyms[0] || '',
-    savedAt: card.savedAt || new Date().toISOString(),
-    stage: card.stage,
-    cardData: card,
-  }));
-  // Filter by month
-  return allWords.filter(w => w.savedAt.startsWith(month));
+  const { data, error } = await supabase.functions.invoke('getVaultWords', {
+    body: { month },
+  });
+  if (error) invokeError(error);
+  // Edge function returns the VaultWord array directly.
+  return data as VaultWord[];
 }
 
-/** INTEGRATION POINT: Replace with Gemini edge function call */
 export async function generateVaultParagraph(input: {
   month: string;
   excludeWordIds: string[];
 }): Promise<GenerateVaultParagraphResult> {
-  await delay(700, 1400);
-  maybeThrow();
-  const availableWords = MOCK_CARDS.filter(c => !input.excludeWordIds.includes(c.id));
-  if (availableWords.length === 0) {
-    return { error: 'No more words available to generate a paragraph.' };
-  }
-  const picked = availableWords.slice(0, Math.min(3, availableWords.length));
-  const pickedWordIds = picked.map(w => w.id);
-  const paragraph =
-    `In the ${input.month} of her travels, Maria discovered how ${picked[0]?.headword || 'ephemeral'} beauty can be. ` +
-    `Every city she visited held a touch of ${picked[1]?.headword || 'serendipity'}, bringing unexpected joy. ` +
-    `Despite the challenges, she remained ${picked[2]?.headword || 'resilient'}, pressing forward with quiet determination. ` +
-    `Her journal overflowed with observations — proof that language is never ${picked[0]?.headword || 'ephemeral'}, even when moments are.`;
-  return { paragraph, pickedWordIds };
+  return withDevCache('generateVaultParagraph', input, async () => {
+    const { data, error } = await supabase.functions.invoke('generateVaultParagraph', {
+      body: { month: input.month, excludeWordIds: input.excludeWordIds },
+    });
+    if (error) invokeError(error);
+    // Edge function returns { paragraph, pickedWordIds } or { error: string }.
+    return data as GenerateVaultParagraphResult;
+  });
 }
 
-/** INTEGRATION POINT: Replace with recommendation engine query */
-export async function getSuggestedVideos(): Promise<GetSuggestedVideosResult> {
-  await delay(400, 800);
-  maybeThrow();
-  // Simulate cold start ~15% of the time
-  if (Math.random() < 0.15) {
-    return {
-      promptMessage:
-        'Watch a few videos first and we\'ll suggest content based on your vocabulary interests!',
-    };
-  }
-  return { videos: MOCK_VIDEOS };
+export async function getSuggestedVideos(query?: string): Promise<GetSuggestedVideosResult> {
+  const body: Record<string, unknown> = {};
+  if (query) body.query = query;
+  const { data, error } = await supabase.functions.invoke('getSuggestedVideos', { body });
+  if (error) invokeError(error);
+  // targetLanguage is read from the user's profile server-side — no need to pass it.
+  // The edge function now hard-filters on defaultAudioLanguage matching the profile lang.
+  return data as GetSuggestedVideosResult;
 }
 
-/** INTEGRATION POINT: Replace with YouTube Data API validation */
 export async function validateVideoUrl(input: { url: string }): Promise<{
   valid: boolean;
   reason?: string;
 }> {
-  await delay(300, 600);
-  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}/;
-  if (!ytRegex.test(input.url)) {
-    return { valid: false, reason: 'Not a valid YouTube URL.' };
-  }
-  // Simulate language check — 20% chance of wrong language
-  if (Math.random() < 0.2) {
-    return { valid: false, reason: 'This video is not in your target language.' };
-  }
-  return { valid: true };
+  const { data, error } = await supabase.functions.invoke('validateVideoUrl', {
+    // targetLanguage is read from the user's profile server-side by the edge function.
+    body: { url: input.url },
+  });
+  if (error) invokeError(error);
+  return data as { valid: boolean; reason?: string };
 }
 
-/** INTEGRATION POINT: Replace with YouTube Captions API / subtitle fetch */
 export async function getVideoCaptions(videoId: string): Promise<{ captions: CaptionLine[] }> {
-  await delay(400, 900);
-  return { captions: MOCK_CAPTIONS };
+  const { data, error } = await supabase.functions.invoke('getVideoCaptions', {
+    body: { videoId },
+  });
+  if (error) invokeError(error);
+  return data as { captions: CaptionLine[] };
 }
 
-/** INTEGRATION POINT: Replace with Gemini edge function call */
-export async function getExploreSuggestions(): Promise<GetExploreSuggestionsResult> {
-  await delay(500, 1000);
-  maybeThrow();
-  // Simulate empty state ~10% of the time
-  if (Math.random() < 0.1) {
-    return { emptyMessage: 'Save some words first and we\'ll suggest new vocabulary you might love!' };
+/**
+ * Record a video watch in watch_history.
+ * Direct Supabase insert — fire-and-forget so it never blocks the player.
+ * RLS ensures only the authenticated user's own rows can be written.
+ */
+export async function recordWatchHistory(
+  videoId: string,
+  categories: string[] = [],
+): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return; // silently skip if not authenticated
+
+  const { error } = await supabase.from('watch_history').insert({
+    user_id: user.id,
+    video_id: videoId,
+    categories,
+  });
+
+  if (error) {
+    console.warn('[watch-history] Insert failed:', error.message);
   }
-  const shuffled = [...MOCK_CARDS].sort(() => Math.random() - 0.5);
-  return { cards: shuffled.slice(0, 5) };
 }
 
-/** INTEGRATION POINT: Replace with Gemini search edge function */
+const STATIC_CARDS: DetailCardData[] = [
+  {
+    id: 'hardcoded-neat',
+    headword: 'neat',
+    synonyms: ['أنيق', 'مرتب'],
+    contexts: [
+      {
+        label: 'Organization',
+        explanation: 'Arranged in a tidy, orderly way.',
+        example: 'She carefully stacked the books in a _neat_ pile on her desk.'
+      },
+      {
+        label: 'Informal',
+        explanation: 'Something that is exceptionally good, clever, or interesting.',
+        example: 'That is a really _neat_ trick you learned.'
+      }
+    ],
+    stage: 0,
+    stage6_streak: 0,
+    active: true,
+    source: 'explore'
+  },
+  {
+    id: 'hardcoded-eloquence',
+    headword: 'eloquence',
+    synonyms: ['فصاحة', 'بلاغة'],
+    contexts: [
+      {
+        label: 'Communication',
+        explanation: 'Fluent or persuasive speaking or writing.',
+        example: 'The speaker moved the entire audience with her profound _eloquence_.'
+      },
+      {
+        label: 'Expression',
+        explanation: 'The quality of delivering a clear, strong message.',
+        example: 'His _eloquence_ in the written essay earned him the highest grade.'
+      }
+    ],
+    stage: 0,
+    stage6_streak: 0,
+    active: true,
+    source: 'explore'
+  },
+  {
+    id: 'hardcoded-flourish',
+    headword: 'flourish',
+    synonyms: ['ازدهار', 'تألق'],
+    contexts: [
+      {
+        label: 'Growth',
+        explanation: 'To grow or develop in a healthy or vigorous way.',
+        example: 'These tropical plants will _flourish_ if you keep them in direct sunlight.'
+      },
+      {
+        label: 'Action',
+        explanation: 'A bold or extravagant gesture to attract attention.',
+        example: 'The magician finished his act with a dramatic _flourish_.'
+      }
+    ],
+    stage: 0,
+    stage6_streak: 0,
+    active: true,
+    source: 'explore'
+  },
+  {
+    id: 'hardcoded-immaculate',
+    headword: 'immaculate',
+    synonyms: ['ناصع', 'لا تشوبه شائبة'],
+    contexts: [
+      {
+        label: 'Appearance',
+        explanation: 'Perfectly clean, neat, or tidy.',
+        example: 'The hotel room was absolutely _immaculate_ when we arrived.'
+      },
+      {
+        label: 'Performance',
+        explanation: 'Free from flaws or mistakes; perfect.',
+        example: 'The timing of her presentation was _immaculate_.'
+      }
+    ],
+    stage: 0,
+    stage6_streak: 0,
+    active: true,
+    source: 'explore'
+  },
+  {
+    id: 'hardcoded-entropy',
+    headword: 'entropy',
+    synonyms: ['إنتروبيا', 'قصور حراري'],
+    contexts: [
+      {
+        label: 'Physics',
+        explanation: 'A measure of the unavailability of a system’s thermal energy for conversion into mechanical work.',
+        example: 'In any closed system, _entropy_ will always increase over time.'
+      },
+      {
+        label: 'General',
+        explanation: 'A gradual decline into disorder or chaos.',
+        example: 'Without strict management, the project quickly descended into _entropy_.'
+      }
+    ],
+    stage: 0,
+    stage6_streak: 0,
+    active: true,
+    source: 'explore'
+  }
+];
+
+export async function getExploreSuggestions(forceRefresh = false): Promise<GetExploreSuggestionsResult> {
+  return withDevCache('getExploreSuggestions', {}, async () => {
+    const { data, error } = await supabase.functions.invoke('getExploreSuggestions', { body: {} });
+    if (error) invokeError(error);
+    // Edge function returns { cards } or { emptyMessage }.
+    return data as GetExploreSuggestionsResult;
+  }, forceRefresh);
+}
+
+
 export async function searchExplore(input: {
   query: string;
   lang: 'native' | 'target';
 }): Promise<SearchExploreResult> {
-  await delay(500, 900);
-  maybeThrow();
-  // Simulate safety error for certain keywords
-  const safetyKeywords = ['violence', 'hate', 'illegal', 'weapon'];
-  if (safetyKeywords.some(k => input.query.toLowerCase().includes(k))) {
-    return { safetyError: true };
+  const queryStr = input.query.toLowerCase().trim();
+  const match = STATIC_CARDS.find(c => c.headword === queryStr);
+  if (match) {
+    return { cards: [match] };
   }
-  const results = MOCK_CARDS.filter(c =>
-    c.headword.toLowerCase().includes(input.query.toLowerCase()) ||
-    c.contexts.some(ctx => ctx.explanation.toLowerCase().includes(input.query.toLowerCase()))
-  );
-  return { cards: results.length > 0 ? results : MOCK_CARDS.slice(0, 3) };
-}
 
-/** INTEGRATION POINT: Replace with Supabase query */
-export async function getPhonemeList(): Promise<PhonemeStatus[]> {
-  await delay(300, 600);
-  // Order: excellent first, then good, then wrong
-  return [...MOCK_PHONEMES].sort((a, b) => {
-    const order = { excellent: 0, good: 1, wrong: 2 };
-    return order[a.status] - order[b.status];
+  return withDevCache('searchExplore', input, async () => {
+    const { data, error } = await supabase.functions.invoke('searchExplore', {
+      body: { query: input.query, lang: input.lang },
+    });
+    if (error) invokeError(error);
+    // Edge function returns { cards } or { safetyError: true }.
+    return data as SearchExploreResult;
   });
 }
 
-/** INTEGRATION POINT: Replace with Supabase/Gemini word lookup */
+export async function getPhonemeList(): Promise<PhonemeStatus[]> {
+  const { data, error } = await supabase.functions.invoke('getPhonemeList', { body: {} });
+  if (error) invokeError(error);
+  // Edge function returns the PhonemeStatus array directly.
+  return data as PhonemeStatus[];
+}
+
 export async function getWordForPhoneme(phoneme: string): Promise<{ word: string }> {
-  await delay(300, 600);
-  const phonemeWordMap: Record<string, string> = {
-    '/θ/': 'think',
-    '/ð/': 'this',
-    '/ɪ/': 'bit',
-    '/æ/': 'cat',
-    '/ʌ/': 'cup',
-    '/ɑː/': 'car',
-    '/iː/': 'see',
-    '/p/': 'pen',
-    '/b/': 'bed',
-    '/t/': 'top',
-    '/d/': 'dog',
-    '/k/': 'key',
-    '/ɒ/': 'got',
-    '/uː/': 'blue',
-    '/ʃ/': 'shoe',
-  };
-  return { word: phonemeWordMap[phoneme] || 'threshold' };
+  const { data, error } = await supabase.functions.invoke('getWordForPhoneme', {
+    body: { phoneme },
+  });
+  if (error) invokeError(error);
+  return data as { word: string };
 }

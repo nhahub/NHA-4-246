@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, corsResponse } from "../_shared/cors.ts";
-import { errorResponse, normalizeError } from "../_shared/errors.ts";
+import { errorResponse } from "../_shared/errors.ts";
 import { callGemini } from "../_shared/gemini.ts";
 import { getSupabaseClient, requireAuth } from "../_shared/supabase.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
@@ -33,8 +33,6 @@ serve(async (req) => {
       });
     }
 
-    const sameLanguage = nativeLang === targetLang;
-
     const prompt = `You are a language-learning assistant. Analyze this text: "${text}"
 Native language: ${nativeLang}
 Target language: ${targetLang}
@@ -61,23 +59,43 @@ Determine:
     "nativeSynonyms": ["<1-3 ${nativeLang} synonyms>"],
     "contexts": [
       {
-        "label": "<context domain e.g. Software Engineering>",
-        "explanation": "<clear explanation in ${nativeLang}>",
-        "example": "<sentence containing the headword in bold using **headword** markdown>"
+        "label": "<context domain e.g. Software Engineering, written in ${targetLang}>",
+        "explanation": "<clear explanation in ${targetLang}>",
+        "example": "<sentence in ${targetLang} containing the headword in bold using **headword** markdown>"
       }
     ]
   }
 }
 
+Every field except the native-language synonyms line must be written entirely in ${targetLang}. Do not mix languages within label, explanation, or example.
 Provide 1-3 context blocks based on how many distinct usage contexts the word has.
 Return ONLY valid JSON, no markdown fences.`;
 
     const raw = await callGemini(prompt, { jsonMode: true });
-    let parsed: { mode: string; card: unknown };
+    let parsed: { mode: string; card: Record<string, unknown> };
     try {
       parsed = JSON.parse(raw);
     } catch {
-      throw new Error("Gemini returned invalid JSON: " + raw);
+      console.error("[generateDetailCard] Gemini returned non-JSON:", raw);
+      return new Response(
+        JSON.stringify({ error: { type: "ai_error", message: "AI response could not be parsed. Please try again." } }),
+        { status: 502, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" } }
+      );
+    }
+
+    // Normalize card shape to match frontend types:
+    // - rename nativeSynonyms → synonyms
+    // - rename translation → nativeTranslation (simplified mode)
+    if (parsed.card && typeof parsed.card === "object") {
+      const card = parsed.card as Record<string, unknown>;
+      if ("nativeSynonyms" in card) {
+        card.synonyms = card.nativeSynonyms;
+        delete card.nativeSynonyms;
+      }
+      if ("translation" in card) {
+        card.nativeTranslation = card.translation;
+        delete card.translation;
+      }
     }
 
     return new Response(JSON.stringify(parsed), {

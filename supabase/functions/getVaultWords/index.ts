@@ -35,7 +35,40 @@ serve(async (req) => {
 
     if (error) throw new Error(error.message);
 
-    return new Response(JSON.stringify(data ?? []), {
+    // Transform raw DB rows into the VaultWord shape expected by the frontend
+    const vaultWords = (data ?? []).map((row: {
+      id: string;
+      headword: string;
+      native_synonyms: string[];
+      stage: number;
+      active: boolean;
+      saved_at: string;
+      source: string;
+      word_contexts: { label: string; explanation: string; example: string }[];
+    }) => ({
+      id:              row.id,
+      headword:        row.headword,
+      nativeTranslation: row.native_synonyms?.[0] ?? "",
+      savedAt:         row.saved_at,
+      stage:           row.stage,
+      cardData: {
+        id:            row.id,
+        headword:      row.headword,
+        synonyms:      row.native_synonyms ?? [],
+        contexts:      (row.word_contexts ?? []).map((c) => ({
+          label:       c.label,
+          explanation: c.explanation,
+          example:     c.example,
+        })),
+        stage:         row.stage,
+        stage6_streak: 0,
+        active:        row.active,
+        savedAt:       row.saved_at,
+        source:        row.source as "manual" | "watch" | "explore" | "selection",
+      },
+    }));
+
+    return new Response(JSON.stringify(vaultWords), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

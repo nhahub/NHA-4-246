@@ -20,8 +20,6 @@ interface DetailCardState {
   originalText: string;
   suggestedCorrection: string | null;
   card: DetailCardData | null;
-  isSaved: boolean;
-  showRemoveConfirm: boolean;
   translationsVisible: boolean;
 }
 
@@ -33,8 +31,6 @@ const initialState: DetailCardState = {
   originalText: '',
   suggestedCorrection: null,
   card: null,
-  isSaved: false,
-  showRemoveConfirm: false,
   translationsVisible: false,
 };
 
@@ -50,8 +46,6 @@ const detailCardSlice = createSlice({
       state.retryCount = 0;
       state.suggestedCorrection = null;
       state.card = null;
-      state.isSaved = false;
-      state.showRemoveConfirm = false;
       state.translationsVisible = false;
     },
     closeCard(state) {
@@ -91,16 +85,6 @@ const detailCardSlice = createSlice({
       }
       state.mode = 'loading';
     },
-    setSaved(state, action: PayloadAction<boolean>) {
-      state.isSaved = action.payload;
-      state.showRemoveConfirm = false;
-    },
-    showRemoveConfirm(state) {
-      state.showRemoveConfirm = true;
-    },
-    hideRemoveConfirm(state) {
-      state.showRemoveConfirm = false;
-    },
     toggleTranslations(state) {
       state.translationsVisible = !state.translationsVisible;
     },
@@ -110,6 +94,6 @@ const detailCardSlice = createSlice({
 export const {
   openCard, closeCard, setMode, setCard, setSuggestedCorrection,
   acceptCorrection, rejectCorrection, setEditText, submitEdit,
-  setSaved, showRemoveConfirm, hideRemoveConfirm, toggleTranslations,
+  toggleTranslations,
 } = detailCardSlice.actions;
 export default detailCardSlice.reducer;
