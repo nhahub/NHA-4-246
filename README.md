@@ -93,7 +93,7 @@ See `design.md` for full token reference. All CSS variables are in `src/index.cs
 - Buttons: pill-shaped (9999px)
 # Team members
 
-Lead Technical Architect: Marwa Ahmed Mohamed Selim
-Presentation and feasilbity report: Noor Ayman Mohamed
-QA and Testing: Aisha Mahmoud Abdelwareth
-Market analysis and GTM: Shahd Medhat Arafa 
+- Lead Technical Architect: Marwa Ahmed Mohamed Selim
+- Presentation and feasilbity report: Nour Ayman Mohammad
+- QA and Testing: Aisha Mahmoud Abdelwareth
+- Market analysis and GTM: Shahd Medhat Arafa 
