@@ -94,6 +94,6 @@ See `design.md` for full token reference. All CSS variables are in `src/index.cs
 # Team members
 
 - Lead Technical Architect: Marwa Ahmed Mohamed Selim
-- Presentation and feasilbity report: Nour Ayman Mohammad
+- Presentation and feasibility report: Nour Ayman Mohammad
 - QA and Testing: Aisha Mahmoud Abdelwareth
 - Market analysis and GTM: Shahd Medhat Arafa 
